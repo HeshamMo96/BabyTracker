@@ -1,0 +1,2475 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>متابعة الطفلة</title>
+
+  <!-- Material UI Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body, #root { min-height: 100%; margin: 0; }
+    body {
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f3f7ff 0%, #f8fafc 100%);
+      -webkit-tap-highlight-color: transparent;
+    }
+    button, input, textarea, select {
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    /* Strong RTL fixes for Material UI when used from CDN/UMD */
+    #root,
+    .MuiBox-root,
+    .MuiContainer-root,
+    .MuiPaper-root,
+    .MuiCard-root,
+    .MuiDialog-root,
+    .MuiDrawer-root,
+    .MuiList-root,
+    .MuiTypography-root,
+    .MuiAlert-root,
+    .MuiSnackbar-root {
+      direction: rtl;
+      text-align: right;
+    }
+
+    .MuiButton-root,
+    .MuiBottomNavigationAction-root,
+    .MuiListItemText-root,
+    .MuiMenuItem-root,
+    .MuiChip-root,
+    .MuiFormControlLabel-root {
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    .MuiInputBase-root,
+    .MuiOutlinedInput-root,
+    .MuiInputBase-input,
+    .MuiSelect-select,
+    textarea {
+      direction: rtl !important;
+      text-align: right !important;
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    .MuiInputLabel-root {
+      direction: rtl !important;
+      right: 16px !important;
+      left: auto !important;
+      transform-origin: top right !important;
+      font-family: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    .MuiInputLabel-root.MuiInputLabel-shrink {
+      transform-origin: top right !important;
+    }
+
+    .MuiOutlinedInput-notchedOutline {
+      text-align: right !important;
+    }
+
+    .MuiSelect-icon {
+      right: auto !important;
+      left: 7px !important;
+    }
+
+    .MuiAlert-icon {
+      margin-left: 12px !important;
+      margin-right: 0 !important;
+    }
+
+    .MuiListItemIcon-root {
+      min-width: 38px !important;
+      margin-left: 6px !important;
+      margin-right: 0 !important;
+    }
+
+    .MuiBottomNavigation-root {
+      direction: rtl;
+    }
+
+    .MuiSnackbar-root {
+      right: 16px !important;
+      left: auto !important;
+    }
+
+    /* Keep charts readable left-to-right while labels remain Arabic */
+    canvas {
+      direction: ltr;
+    }
+  </style>
+
+  <!-- React / MUI / Recharts via CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script src="https://unpkg.com/@emotion/react@11.11.4/dist/emotion-react.umd.min.js"></script>
+  <script src="https://unpkg.com/@emotion/styled@11.11.5/dist/emotion-styled.umd.min.js"></script>
+  <script src="https://unpkg.com/@mui/material@5.15.20/umd/material-ui.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+<div id="root" dir="rtl"></div>
+
+<script type="text/babel">
+const {
+  AppBar, Toolbar, Typography, Box, Container, Paper, Card, CardContent, Button,
+  BottomNavigation, BottomNavigationAction, TextField, MenuItem, Grid, Stack,
+  Chip, Alert, Snackbar, IconButton, Divider, Switch, FormControlLabel, Dialog,
+  DialogTitle, DialogContent, DialogActions, CircularProgress, Tabs, Tab,
+  Drawer, List, ListItemButton, ListItemIcon, ListItemText, Fab, SpeedDial, SpeedDialAction,
+  useMediaQuery, CssBaseline
+} = MaterialUI;
+
+
+const API_STORAGE_KEY = "baby_tracker_api_url_v2";
+const LOCAL_STORAGE_KEY = "baby_tracker_offline_cache_v2";
+
+const FEED_TYPES = ["طبيعي مباشر", "لبن أم مشفوط", "صناعي", "مختلط"];
+const DIAPER_TYPES = ["بول", "براز", "بول + براز", "ناشفة"];
+
+const NAV_ITEMS = [
+  { value: "dashboard", label: "الرئيسية", icon: "🏠" },
+  { value: "feed", label: "رضعة", icon: "🍼" },
+  { value: "diaper", label: "حفاضة", icon: "🧷" },
+  { value: "weight", label: "وزن", icon: "⚖️" },
+  { value: "reports", label: "تقارير", icon: "📊" },
+  { value: "reminders", label: "تنبيهات", icon: "⏰" },
+  { value: "settings", label: "إعدادات", icon: "⚙️" }
+];
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function nowTime() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function toDateKey(value) {
+  if (value === null || value === undefined || value === "") return "";
+
+  // Use LOCAL date parts to avoid timezone shifting 2026-05-17 to 2026-05-16
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  // Google Sheets serial date number
+  if (typeof value === "number" && Number.isFinite(value) && value > 20000 && value < 80000) {
+    const utc = new Date(Math.round((value - 25569) * 86400 * 1000));
+    const y = utc.getUTCFullYear();
+    const m = String(utc.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(utc.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  let s = String(value).trim();
+  if (!s) return "";
+
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+  const easternDigits = "۰۱۲۳۴۵۶۷۸۹";
+  s = s.replace(/[٠-٩]/g, d => String(arabicDigits.indexOf(d)))
+       .replace(/[۰-۹]/g, d => String(easternDigits.indexOf(d)))
+       .replace(/\s+/g, " ")
+       .trim();
+
+  // ISO datetime strings from Apps Script can be shifted to the previous UTC day.
+  // Parse them as Date and use the user's local date parts.
+  if (/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}T/.test(s)) {
+    const parsedIso = new Date(s);
+    if (!Number.isNaN(parsedIso.getTime())) {
+      const y = parsedIso.getFullYear();
+      const mo = String(parsedIso.getMonth() + 1).padStart(2, "0");
+      const da = String(parsedIso.getDate()).padStart(2, "0");
+      return `${y}-${mo}-${da}`;
+    }
+  }
+
+  // Plain ISO/date strings: 2026-05-17
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (m) {
+    return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+  }
+
+  // Common browser Date string: Sun May 17 2026 ...
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime()) && /[A-Za-z]{3,}|GMT|UTC/.test(s)) {
+    const y = parsed.getFullYear();
+    const mo = String(parsed.getMonth() + 1).padStart(2, "0");
+    const da = String(parsed.getDate()).padStart(2, "0");
+    return `${y}-${mo}-${da}`;
+  }
+
+  // 17 - 05 - 2026, 17/05/2026, 05/17/2026
+  m = s.match(/^(\d{1,2})\s*[-\/]\s*(\d{1,2})\s*[-\/]\s*(\d{4})/);
+  if (m) {
+    let a = Number(m[1]);
+    let b = Number(m[2]);
+    let day, month;
+
+    if (a > 12) {
+      day = a; month = b;
+    } else if (b > 12) {
+      day = b; month = a;
+    } else {
+      // Arabic/Egypt default: day/month/year
+      day = a; month = b;
+    }
+
+    return `${m[3]}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+
+  return s.slice(0, 10);
+}
+
+function toTimeKey(value) {
+  if (value === null || value === undefined || value === "") return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${String(value.getHours()).padStart(2,"0")}:${String(value.getMinutes()).padStart(2,"0")}`;
+  }
+
+  // Google Sheets time serial, e.g. 0.291666 = 07:00
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1) {
+    const total = Math.round(value * 24 * 60);
+    return `${String(Math.floor(total / 60)).padStart(2,"0")}:${String(total % 60).padStart(2,"0")}`;
+  }
+
+  let s = String(value).trim();
+  if (!s) return "";
+
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+  const easternDigits = "۰۱۲۳۴۵۶۷۸۹";
+  s = s.replace(/[٠-٩]/g, d => String(arabicDigits.indexOf(d)))
+       .replace(/[۰-۹]/g, d => String(easternDigits.indexOf(d)))
+       .trim();
+
+  // ISO datetime from Apps Script: parse as Date and use local time.
+  if (/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}T/.test(s)) {
+    const parsedIso = new Date(s);
+    if (!Number.isNaN(parsedIso.getTime())) {
+      return `${String(parsedIso.getHours()).padStart(2,"0")}:${String(parsedIso.getMinutes()).padStart(2,"0")}`;
+    }
+  }
+
+  // HH:mm or H:mm
+  let m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return `${String(m[1]).padStart(2,"0")}:${m[2]}`;
+
+  // Browser Date string containing HH:mm
+  m = s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  if (m) return `${String(m[1]).padStart(2,"0")}:${m[2]}`;
+
+  // Last resort: never show 1899 as time
+  if (s.startsWith("1899") || s.startsWith("1900")) return "";
+
+  return s.slice(0, 5);
+}
+function sameDate(a, b) {
+  return toDateKey(a) === toDateKey(b);
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function minutesSince(date, time) {
+  if (!date || !time) return null;
+  const t = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  return Math.floor((Date.now() - t.getTime()) / 60000);
+}
+function humanSince(minutes) {
+  if (minutes === null) return "غير متاح";
+  if (minutes < 0) return "الآن";
+  if (minutes < 60) return `منذ ${minutes} دقيقة`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `منذ ${h} ساعة${m ? ` و${m} دقيقة` : ""}`;
+}
+function safeNumber(v) {
+  const n = Number(v || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+function getLocalData() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || initialData();
+  } catch {
+    return initialData();
+  }
+}
+function setLocalData(data) {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+}
+function initialData() {
+  return {
+    settings: {
+      babyName: "بنتي",
+      birthDate: "",
+      birthWeight: 1680,
+      gestationalAgeWeeks: "",
+      targetMlPerKg: ""
+    },
+    feeds: [],
+    diapers: [],
+    weights: [],
+    events: [],
+    reminders: []
+  };
+}
+
+function normalizeRemoteData(remote) {
+  const base = { ...initialData(), ...(remote || {}) };
+
+  base.feeds = (base.feeds || []).map(x => ({
+    ...x,
+    id: x.id || uid(),
+    date: toDateKey(x.date),
+    time: toTimeKey(x.time),
+    knownMl: x.knownMl ?? x.ml ?? 0,
+    directMinutes: x.directMinutes ?? x.minutes ?? 0
+  }));
+
+  base.diapers = (base.diapers || []).map(x => ({
+    ...x,
+    id: x.id || uid(),
+    date: toDateKey(x.date),
+    time: toTimeKey(x.time),
+    stoolColor: x.stoolColor ?? x.color ?? "",
+    stoolTexture: x.stoolTexture ?? x.texture ?? ""
+  }));
+
+  base.weights = (base.weights || []).map(x => ({
+    ...x,
+    id: x.id || uid(),
+    date: toDateKey(x.date),
+    time: toTimeKey(x.time)
+  }));
+
+  base.events = base.events || [];
+  base.reminders = base.reminders || [];
+  base.settings = base.settings || {};
+
+  return base;
+}
+
+
+function normalizeAppsScriptUrl(url) {
+  const clean = String(url || "").trim();
+  if (!clean) return "";
+  return clean.replace(/\/dev(\?|$)/, "/exec$1");
+}
+
+function apiRequest(action, payload = {}) {
+  const apiUrl = normalizeAppsScriptUrl(localStorage.getItem(API_STORAGE_KEY));
+  if (!apiUrl) {
+    throw new Error("لم يتم ضبط رابط Google Apps Script بعد. ضع رابط /exec في الإعدادات.");
+  }
+
+  // GitHub Pages is static hosting only, so we use JSONP instead of fetch/POST.
+  // This avoids browser CORS restrictions when calling Google Apps Script.
+  return new Promise((resolve, reject) => {
+    const callbackName = "babyTrackerCallback_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+    const script = document.createElement("script");
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("انتهت مهلة الاتصال بـ Google Apps Script. تأكد من رابط /exec والصلاحيات."));
+    }, 20000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      try { delete window[callbackName]; } catch {}
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = (json) => {
+      cleanup();
+      if (!json || !json.ok) {
+        reject(new Error((json && json.error) || "حدث خطأ في الاتصال"));
+        return;
+      }
+      resolve(json.data);
+    };
+
+    try {
+      const url = new URL(apiUrl);
+      url.searchParams.set("action", action);
+      url.searchParams.set("payload", JSON.stringify(payload));
+      url.searchParams.set("callback", callbackName);
+      url.searchParams.set("_", String(Date.now()));
+
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("تعذر الاتصال بـ Google Apps Script. تأكد أن الرابط ينتهي بـ /exec وأن الوصول Anyone with the link."));
+      };
+
+      script.src = url.toString();
+      document.body.appendChild(script);
+    } catch (e) {
+      cleanup();
+      reject(new Error("رابط Google Apps Script غير صحيح."));
+    }
+  });
+}
+
+
+function calcSummary(data, date) {
+  const feeds = data.feeds.filter(x => sameDate(x.date, date));
+  const diapers = data.diapers.filter(x => sameDate(x.date, date));
+  const weights = [...data.weights].sort((a,b) => (`${toDateKey(b.date)} ${toTimeKey(b.time)}`).localeCompare(`${toDateKey(a.date)} ${toTimeKey(a.time)}`));
+  const lastWeight = weights[0];
+
+  const knownMl = feeds.reduce((s,x)=>s + safeNumber(x.knownMl), 0);
+  const directFeeds = feeds.filter(x => x.type === "طبيعي مباشر");
+  const pumpedFeeds = feeds.filter(x => x.type === "لبن أم مشفوط");
+  const formulaFeeds = feeds.filter(x => x.type === "صناعي");
+  const mixedFeeds = feeds.filter(x => x.type === "مختلط");
+
+  const directMinutes = directFeeds.reduce((s,x)=>s + safeNumber(x.directMinutes), 0);
+  const pumpedMl = pumpedFeeds.reduce((s,x)=>s + safeNumber(x.knownMl), 0);
+  const formulaMl = formulaFeeds.reduce((s,x)=>s + safeNumber(x.knownMl), 0);
+  const mixedMl = mixedFeeds.reduce((s,x)=>s + safeNumber(x.knownMl), 0);
+
+  const wet = diapers.filter(x => String(x.type).includes("بول")).length;
+  const stool = diapers.filter(x => String(x.type).includes("براز")).length;
+  const weight = lastWeight ? safeNumber(lastWeight.grams) : 0;
+  const mlkg = weight ? Math.round((knownMl / (weight / 1000)) * 10) / 10 : 0;
+
+  const lastFeed = [...feeds].sort((a,b)=>String(b.time).localeCompare(String(a.time)))[0];
+  const lastDiaper = [...diapers].sort((a,b)=>String(b.time).localeCompare(String(a.time)))[0];
+
+  return {
+    feeds, diapers,
+    knownMl, directMinutes, wet, stool, weight, mlkg,
+    lastFeed, lastDiaper,
+    feedCount: feeds.length,
+    directFeedCount: directFeeds.length,
+    pumpedFeedCount: pumpedFeeds.length,
+    formulaFeedCount: formulaFeeds.length,
+    mixedFeedCount: mixedFeeds.length,
+    pumpedMl, formulaMl, mixedMl
+  };
+}
+
+function buildDailySeries(data, days = 14) {
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const date = d.toISOString().slice(0,10);
+    const s = calcSummary(data, date);
+    const wForDate = data.weights
+      .filter(x => toDateKey(x.date) <= date)
+      .sort((a,b) => (`${toDateKey(b.date)} ${b.time}`).localeCompare(`${toDateKey(a.date)} ${a.time}`))[0];
+    out.push({
+      date: date.slice(5),
+      fullDate: date,
+      knownMl: s.knownMl,
+      wet: s.wet,
+      stool: s.stool,
+      feeds: s.feeds.length,
+      directMinutes: s.directMinutes,
+      weight: wForDate ? safeNumber(wForDate.grams) : null
+    });
+  }
+  return out;
+}
+
+function dateRange(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - days + 1);
+  return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
+}
+function inLastDays(item, days) {
+  const { start, end } = dateRange(days);
+  const key = toDateKey(item.date);
+  return key >= start && key <= end;
+}
+function average(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a,b)=>a + safeNumber(b),0) / arr.length;
+}
+function round1(n) {
+  return Math.round(safeNumber(n) * 10) / 10;
+}
+function groupByDate(items, days) {
+  const map = {};
+  buildDailySeries({ feeds: [], diapers: [], weights: [] }, days).forEach(x => map[x.fullDate] = []);
+  items.filter(x => inLastDays(x, days)).forEach(x => {
+    const key = toDateKey(x.date);
+    if (!map[key]) map[key] = [];
+    map[key].push(x);
+  });
+  return map;
+}
+function getReportStats(data, days) {
+  const series = buildDailySeries(data, days);
+  const feeds = data.feeds.filter(x => inLastDays(x, days));
+  const diapers = data.diapers.filter(x => inLastDays(x, days));
+  const weights = data.weights.filter(x => inLastDays(x, days)).sort((a,b)=>(`${toDateKey(a.date)} ${a.time}`).localeCompare(`${toDateKey(b.date)} ${b.time}`));
+
+  const direct = feeds.filter(x => x.type === "طبيعي مباشر");
+  const bottle = feeds.filter(x => x.type !== "طبيعي مباشر");
+  const pumped = feeds.filter(x => x.type === "لبن أم مشفوط");
+  const formula = feeds.filter(x => x.type === "صناعي");
+  const mixed = feeds.filter(x => x.type === "مختلط");
+
+  const knownMl = feeds.reduce((s,x)=>s + safeNumber(x.knownMl),0);
+  const directMinutes = feeds.reduce((s,x)=>s + safeNumber(x.directMinutes),0);
+  const wet = diapers.filter(x => String(x.type).includes("بول")).length;
+  const stool = diapers.filter(x => String(x.type).includes("براز")).length;
+
+  let gain = null, gainPerDay = null;
+  if (weights.length >= 2) {
+    const first = weights[0], last = weights[weights.length - 1];
+    const diffDays = Math.max(1, Math.round((new Date(toDateKey(last.date)) - new Date(toDateKey(first.date))) / 86400000));
+    gain = safeNumber(last.grams) - safeNumber(first.grams);
+    gainPerDay = gain / diffDays;
+  }
+
+  const dailyKnown = series.map(x => x.knownMl);
+  const dailyWet = series.map(x => x.wet);
+  const dailyStool = series.map(x => x.stool);
+  const dailyFeeds = series.map(x => x.feeds);
+
+  const feedHours = feeds
+    .map(x => safeNumber(String(x.time || "00:00").split(":")[0]))
+    .filter(x => Number.isFinite(x));
+
+  const nightFeeds = feedHours.filter(h => h >= 0 && h < 6).length;
+  const morningFeeds = feedHours.filter(h => h >= 6 && h < 12).length;
+  const afternoonFeeds = feedHours.filter(h => h >= 12 && h < 18).length;
+  const eveningFeeds = feedHours.filter(h => h >= 18 && h <= 23).length;
+
+  return {
+    series, feeds, diapers, weights,
+    knownMl, directMinutes, wet, stool,
+    direct, bottle, pumped, formula, mixed,
+    gain, gainPerDay,
+    avgKnown: average(dailyKnown),
+    avgWet: average(dailyWet),
+    avgStool: average(dailyStool),
+    avgFeeds: average(dailyFeeds),
+    maxKnown: Math.max(0, ...dailyKnown),
+    minKnown: Math.min(...dailyKnown.filter(x=>x>0), 0) || 0,
+    nightFeeds, morningFeeds, afternoonFeeds, eveningFeeds
+  };
+}
+function buildDoctorSummary(data, days) {
+  const s = getReportStats(data, days);
+  const lines = [];
+  lines.push(`تقرير آخر ${days} يوم`);
+  lines.push(`عدد الرضعات المسجلة: ${s.feeds.length}`);
+  lines.push(`متوسط الرضعات يوميًا: ${round1(s.avgFeeds)}`);
+  lines.push(`إجمالي الكمية المعروفة: ${s.knownMl} ml`);
+  lines.push(`متوسط الكمية المعروفة يوميًا: ${round1(s.avgKnown)} ml/day`);
+  lines.push(`رضاعة طبيعية مباشرة: ${s.direct.length} مرة، إجمالي مدة ${s.directMinutes} دقيقة`);
+  lines.push(`رضعات ببرونة/كمية معروفة: ${s.bottle.length} مرة`);
+  lines.push(`حفاضات بول: ${s.wet}، متوسط ${round1(s.avgWet)} يوميًا`);
+  lines.push(`حفاضات براز: ${s.stool}، متوسط ${round1(s.avgStool)} يوميًا`);
+  if (s.weights.length) {
+    lines.push(`قياسات الوزن: ${s.weights.length}`);
+    lines.push(`آخر وزن: ${s.weights[s.weights.length - 1].grams} g بتاريخ ${toDateKey(s.weights[s.weights.length - 1].date)}`);
+  }
+  if (s.gain !== null) {
+    lines.push(`فرق الوزن خلال الفترة: ${s.gain} g`);
+    lines.push(`متوسط الزيادة التقريبي: ${round1(s.gainPerDay)} g/day`);
+  }
+  lines.push(`ملاحظة: إجمالي اللبن المعروف لا يشمل كمية الرضاعة الطبيعية المباشرة من صدر الأم.`);
+  return lines.join("\n");
+}
+
+function fmtMin(m) {
+  if (!m) return "0 دقيقة";
+  if (m < 60) return `${m} دقيقة`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return `${h} س${r ? ` ${r} د` : ""}`;
+}
+function fmtTime(date, time) {
+  const t = toTimeKey(time);
+  return t || "—";
+}
+function getLast24hStats(data) {
+  const h24 = 24 * 3600 * 1000;
+  const now = Date.now();
+  function inW(x) {
+    const t = new Date(`${toDateKey(x.date)}T${toTimeKey(x.time)||"00:00"}:00`).getTime();
+    return now - t <= h24 && t <= now;
+  }
+  const byTime = (a, b) => (`${toDateKey(a.date)} ${toTimeKey(a.time)||"00:00"}`).localeCompare(`${toDateKey(b.date)} ${toTimeKey(b.time)||"00:00"}`);
+  const feeds   = data.feeds.filter(inW).sort(byTime);
+  const diapers = data.diapers.filter(inW).sort(byTime);
+  const intervals = [];
+  for (let i = 1; i < feeds.length; i++) {
+    const prev = new Date(`${toDateKey(feeds[i-1].date)}T${toTimeKey(feeds[i-1].time)||"00:00"}:00`).getTime();
+    const curr = new Date(`${toDateKey(feeds[i].date)}T${toTimeKey(feeds[i].time)||"00:00"}:00`).getTime();
+    const d = Math.round((curr - prev) / 60000);
+    if (d > 0 && d < 600) intervals.push(d);
+  }
+  const avgInterval = intervals.length ? Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length) : null;
+  const maxInterval = intervals.length ? Math.max(...intervals) : null;
+  const lastFeed   = feeds[feeds.length-1] || null;
+  const lastDiaper = diapers[diapers.length-1] || null;
+  let predictedNext = null;
+  if (lastFeed && avgInterval) {
+    const lt = new Date(`${toDateKey(lastFeed.date)}T${toTimeKey(lastFeed.time)||"00:00"}:00`).getTime();
+    predictedNext = new Date(lt + avgInterval * 60000);
+  }
+  const totalMl       = feeds.reduce((s,x)=>s+safeNumber(x.knownMl),0);
+  const totalDirectMin= feeds.reduce((s,x)=>s+safeNumber(x.directMinutes),0);
+  const wet   = diapers.filter(x=>String(x.type).includes("بول")).length;
+  const stool = diapers.filter(x=>String(x.type).includes("براز")).length;
+  const timeline = [
+    ...feeds.map(x=>({...x, kind:"feed"})),
+    ...diapers.map(x=>({...x, kind:"diaper"})),
+  ].sort(byTime);
+  return { feeds, diapers, totalMl, totalDirectMin, wet, stool, avgInterval, maxInterval, lastFeed, lastDiaper, predictedNext, intervals, timeline };
+}
+
+function getFeedingRhythm(feeds) {
+  const sorted = [...feeds].sort((a,b)=>(`${toDateKey(a.date)} ${toTimeKey(a.time)||"00:00"}`).localeCompare(`${toDateKey(b.date)} ${toTimeKey(b.time)||"00:00"}`));
+  const intervals = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(`${toDateKey(sorted[i-1].date)}T${toTimeKey(sorted[i-1].time)||"00:00"}:00`).getTime();
+    const curr = new Date(`${toDateKey(sorted[i].date)}T${toTimeKey(sorted[i].time)||"00:00"}:00`).getTime();
+    const d = Math.round((curr - prev) / 60000);
+    if (d > 0 && d < 600) intervals.push(d);
+  }
+  if (!intervals.length) return null;
+  const avg = Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length);
+  const max = Math.max(...intervals);
+  const min = Math.min(...intervals);
+  const variance = intervals.reduce((s,x)=>s+Math.pow(x-avg,2),0)/intervals.length;
+  const cv = Math.sqrt(variance)/avg;
+  const consistency = cv < 0.25 ? "منتظم جداً" : cv < 0.45 ? "منتظم نسبياً" : "غير منتظم";
+  const consistencySt = cv < 0.25 ? "ok" : cv < 0.45 ? "warn" : "bad";
+  return { avg, max, min, consistency, consistencySt, count: intervals.length };
+}
+
+function getBreastBalance(feeds) {
+  const bf = feeds.filter(x=>(x.type==="طبيعي مباشر"||x.type==="مختلط") && x.side);
+  if (!bf.length) return null;
+  const right = bf.filter(x=>x.side==="يمين"||x.side==="يمين وشمال").length;
+  const left  = bf.filter(x=>x.side==="شمال"||x.side==="يمين وشمال").length;
+  const rMins = feeds.filter(x=>(x.type==="طبيعي مباشر"||x.type==="مختلط")&&(x.side==="يمين"||x.side==="يمين وشمال")).reduce((s,x)=>s+safeNumber(x.directMinutes),0);
+  const lMins = feeds.filter(x=>(x.type==="طبيعي مباشر"||x.type==="مختلط")&&(x.side==="شمال"||x.side==="يمين وشمال")).reduce((s,x)=>s+safeNumber(x.directMinutes),0);
+  const total = right + left || 1;
+  return { right, left, rMins, lMins, rightPct: Math.round(right/total*100), leftPct: Math.round(left/total*100) };
+}
+
+function getWeekComparison(data) {
+  const now = Date.now();
+  const W = 7 * 86400000;
+  function inRange(x, from, to) {
+    const t = new Date(`${toDateKey(x.date)}T${toTimeKey(x.time)||"00:00"}:00`).getTime();
+    return t >= from && t < to;
+  }
+  const tF = data.feeds.filter(x=>inRange(x, now-W, now));
+  const lF = data.feeds.filter(x=>inRange(x, now-2*W, now-W));
+  const tD = data.diapers.filter(x=>inRange(x, now-W, now));
+  const lD = data.diapers.filter(x=>inRange(x, now-2*W, now-W));
+  const tMl = tF.reduce((s,x)=>s+safeNumber(x.knownMl),0);
+  const lMl = lF.reduce((s,x)=>s+safeNumber(x.knownMl),0);
+  const tWet  = tD.filter(x=>String(x.type).includes("بول")).length;
+  const lWet  = lD.filter(x=>String(x.type).includes("بول")).length;
+  const tStool= tD.filter(x=>String(x.type).includes("براز")).length;
+  const lStool= lD.filter(x=>String(x.type).includes("براز")).length;
+  function pct(a,b){ return b===0?null:Math.round((a-b)/b*100); }
+  return {
+    thisFeeds: tF.length, lastFeeds: lF.length, feedsDelta: tF.length - lF.length,
+    thisMl: Math.round(tMl/7), lastMl: Math.round(lMl/7), mlPct: pct(tMl,lMl),
+    thisWet: round1(tWet/7), lastWet: round1(lWet/7), wetDelta: round1((tWet-lWet)/7),
+    thisStool: round1(tStool/7), lastStool: round1(lStool/7),
+  };
+}
+
+function getStoolAnalysis(diapers, days) {
+  const recent = diapers.filter(x=>inLastDays(x,days)&&String(x.type).includes("براز"));
+  if (!recent.length) return null;
+  const COLORS = {
+    "أصفر":  { st:"ok",   note:"طبيعي — شائع في الرضاعة الطبيعية" },
+    "بني":   { st:"ok",   note:"طبيعي" },
+    "أخضر":  { st:"warn", note:"محتمل — اختلال الحليب الأمامي/الخلفي، أو نشاط معوي" },
+    "أسود":  { st:"bad",  note:"⚠️ راجع الطبيب — ميكونيوم متأخر أو نزيف" },
+    "أحمر":  { st:"bad",  note:"⚠️ راجع الطبيب فوراً — احتمال نزيف" },
+    "أبيض":  { st:"bad",  note:"⚠️ راجع الطبيب — مشكلة محتملة في الكبد" },
+    "رمادي": { st:"bad",  note:"⚠️ راجع الطبيب — مشكلة محتملة في الكبد" },
+  };
+  const colorCount = {};
+  recent.forEach(x => { if (x.stoolColor) colorCount[x.stoolColor.trim()] = (colorCount[x.stoolColor.trim()]||0)+1; });
+  const textures = {};
+  recent.forEach(x => { if (x.stoolTexture) textures[x.stoolTexture] = (textures[x.stoolTexture]||0)+1; });
+  const sorted5 = [...recent].sort((a,b)=>(`${toDateKey(b.date)} ${toTimeKey(b.time)||"00:00"}`).localeCompare(`${toDateKey(a.date)} ${toTimeKey(a.time)||"00:00"}`)).slice(0,6);
+  const alarming = Object.keys(colorCount).filter(c=>{
+    const k = Object.keys(COLORS).find(k=>c.includes(k));
+    return k && COLORS[k].st==="bad";
+  });
+  return { recent, colorCount, textures, sorted5, alarming, COLORS };
+}
+
+function getWhoPercentile(grams, ageMonths) {
+  if (!grams || ageMonths === null || ageMonths < 0) return null;
+  const ref = [
+    {m:0,  p3:2400, p15:2800, p50:3200, p85:3700, p97:4200},
+    {m:1,  p3:2900, p15:3400, p50:4200, p85:5000, p97:5500},
+    {m:2,  p3:3800, p15:4400, p50:5100, p85:6000, p97:6600},
+    {m:3,  p3:4500, p15:5100, p50:5800, p85:6700, p97:7400},
+    {m:4,  p3:4900, p15:5600, p50:6400, p85:7300, p97:8100},
+    {m:5,  p3:5300, p15:6000, p50:6900, p85:7800, p97:8700},
+    {m:6,  p3:5700, p15:6400, p50:7300, p85:8300, p97:9300},
+    {m:9,  p3:6800, p15:7600, p50:8500, p85:9600, p97:10700},
+    {m:12, p3:7600, p15:8500, p50:9500, p85:10700,p97:11900},
+  ];
+  const m = Math.min(12, Math.max(0, Math.round(ageMonths)));
+  const row = ref.reduce((p,c)=>Math.abs(c.m-m)<Math.abs(p.m-m)?c:p, ref[0]);
+  let band, bandSt, bandLabel;
+  if      (grams < row.p3)  { band="< P3";     bandSt="bad";  bandLabel="أقل من المتوسط بكثير"; }
+  else if (grams < row.p15) { band="P3–P15";   bandSt="warn"; bandLabel="أقل من المتوسط"; }
+  else if (grams < row.p85) { band="P15–P85";  bandSt="ok";   bandLabel="ضمن المعدل الطبيعي"; }
+  else if (grams < row.p97) { band="P85–P97";  bandSt="warn"; bandLabel="أعلى من المتوسط"; }
+  else                      { band="> P97";    bandSt="warn"; bandLabel="أعلى من المتوسط بكثير"; }
+  const diffFromP50 = grams - row.p50;
+  return { band, bandSt, bandLabel, p3:row.p3, p50:row.p50, p97:row.p97, diffFromP50 };
+}
+
+function StatCard({ label, value, sub, icon = "•", color = "#2563eb", soft = "#eff6ff" }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        borderRadius: 3,
+        p: { xs: 1.5, md: 1.75 },
+        border: "1px solid #e7ecf5",
+        background: `linear-gradient(135deg, #ffffff 0%, ${soft} 100%)`,
+        boxShadow: "0 4px 12px rgba(15,23,42,0.06)",
+      }}
+    >
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
+        <Box sx={{
+          width: 32,
+          height: 32,
+          borderRadius: 1.5,
+          bgcolor: color,
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 16,
+          flexShrink: 0,
+          boxShadow: `0 3px 8px ${color}44`
+        }}>
+          {icon}
+        </Box>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "#64748b",
+            fontWeight: 700,
+            lineHeight: 1.35,
+            textAlign: "right",
+            flex: 1,
+            pr: 1
+          }}
+        >
+          {label}
+        </Typography>
+      </Stack>
+
+      <Typography
+        sx={{
+          fontWeight: 900,
+          color: "#0f172a",
+          lineHeight: 1.1,
+          fontSize: { xs: 22, sm: 24, md: 26 },
+          letterSpacing: "-0.02em",
+          textAlign: "right",
+          overflowWrap: "anywhere"
+        }}
+      >
+        {value}
+      </Typography>
+
+      {sub && (
+        <Typography
+          variant="caption"
+          sx={{
+            color: "#475569",
+            display: "block",
+            fontWeight: 700,
+            lineHeight: 1.4,
+            textAlign: "right",
+            mt: 0.4
+          }}
+        >
+          {sub}
+        </Typography>
+      )}
+    </Paper>
+  );
+}
+
+
+function RecordPill({ label, value, color = "#e2e8f0", textColor = "#0f172a" }) {
+  if (value === undefined || value === null || value === "") return null;
+  return (
+    <Box sx={{
+      px: 1.25,
+      py: .7,
+      borderRadius: 99,
+      border: "1px solid " + color,
+      bgcolor: "#fff",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: .5
+    }}>
+      <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700 }}>{label}</Typography>
+      <Typography variant="caption" sx={{ color: textColor, fontWeight: 800 }}>{value}</Typography>
+    </Box>
+  );
+}
+
+function SectionCard({ title, children, action }) {
+  return (
+    <Paper
+      elevation={0}
+      dir="rtl"
+      sx={{
+        p: { xs: 1.35, md: 1.75 },
+        borderRadius: 3,
+        border: "1px solid #e7ecf5",
+        mb: 2,
+        textAlign: "right",
+        background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
+        boxShadow: "0 4px 14px rgba(15,23,42,0.04)"
+      }}
+    >
+      <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5, gap: 1 }}>
+        <Typography variant="h5" fontWeight={900} sx={{ color: "#0f172a" }}>{title}</Typography>
+        {action}
+      </Stack>
+      {children}
+    </Paper>
+  );
+}
+
+function ChartCanvas({ type, labels, datasets }) {
+  const canvasRef = React.useRef(null);
+  const chartRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!window.Chart || !canvasRef.current) return;
+
+    if (chartRef.current) {
+      chartRef.current.destroy();
+    }
+
+    chartRef.current = new Chart(canvasRef.current, {
+      type,
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { font: { family: "Cairo" } } },
+          tooltip: { rtl: true, textDirection: "rtl", titleFont: { family: "Cairo" }, bodyFont: { family: "Cairo" } }
+        },
+        scales: type === "pie" ? {} : {
+          x: { ticks: { maxRotation: 0, font: { family: "Cairo" } } },
+          y: { beginAtZero: false, ticks: { font: { family: "Cairo" } } }
+        }
+      }
+    });
+
+    return () => {
+      if (chartRef.current) chartRef.current.destroy();
+    };
+  }, [type, JSON.stringify(labels), JSON.stringify(datasets)]);
+
+  if (!window.Chart) {
+    return <Alert severity="warning">تعذر تحميل مكتبة الرسوم البيانية. افتح الصفحة بإنترنت أو ارفعها على استضافة.</Alert>;
+  }
+
+  return <Box sx={{ height: 300 }}><canvas ref={canvasRef}></canvas></Box>;
+}
+
+
+const theme = MaterialUI.createTheme({
+  direction: "rtl",
+  typography: {
+    fontFamily: '"Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    button: { fontWeight: 700 }
+  },
+  shape: { borderRadius: 16 },
+  components: {
+    MuiTextField: {
+      defaultProps: {
+        inputProps: { dir: "rtl" },
+        InputLabelProps: { dir: "rtl" }
+      }
+    },
+    MuiSelect: {
+      defaultProps: {
+        inputProps: { dir: "rtl" }
+      }
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: { fontFamily: '"Cairo", system-ui, sans-serif' }
+      }
+    },
+    MuiTypography: {
+      styleOverrides: {
+        root: { fontFamily: '"Cairo", system-ui, sans-serif' }
+      }
+    }
+  }
+});
+
+function App() {
+  const [page, setPage] = React.useState("dashboard");
+  const [data, setData] = React.useState(getLocalData());
+  const [date, setDate] = React.useState(todayStr());
+  const [loading, setLoading] = React.useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = React.useState("");
+  const [toast, setToast] = React.useState("");
+  const [syncPaused, setSyncPaused] = React.useState(false);
+  const lastLocalEditRef = React.useRef(0);
+  const syncingRef = React.useRef(false);
+  const [apiUrl, setApiUrl] = React.useState(localStorage.getItem(API_STORAGE_KEY) || "");
+  const [editing, setEditing] = React.useState(null);
+  const isSmall = useMediaQuery("(max-width:700px)");
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+
+  async function syncFromCloud(options = {}) {
+    const silent = !!options.silent;
+    const force = !!options.force;
+
+    // لا تعمل مزامنة تلقائية أثناء الكتابة أو بعد حفظ محلي مباشر حتى لا تمسح المدخلات.
+    const recentlyEdited = Date.now() - lastLocalEditRef.current < 15000;
+    if (!force && (syncPaused || recentlyEdited || syncingRef.current)) return;
+
+    syncingRef.current = true;
+    setLoading(true);
+    try {
+      const remote = await apiRequest("getAll", {});
+      const merged = normalizeRemoteData(remote);
+      setData(merged);
+      setLocalData(merged);
+      setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      if (!silent) setToast("تم تحديث البيانات من Google Sheets");
+    } catch (e) {
+      if (!silent) setToast(e.message);
+      console.warn("Auto sync failed:", e);
+    } finally {
+      syncingRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function addCloud(action, localKey, row) {
+    // حفظ فوري محليًا عشان المستخدم يشوف السجل فورًا
+    lastLocalEditRef.current = Date.now();
+    const next = { ...data, [localKey]: [...data[localKey], row] };
+    setData(next);
+    setLocalData(next);
+
+    try {
+      await apiRequest(action, row);
+      setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setToast("تم الحفظ في Google Sheets");
+      // لا نعمل sync مباشر هنا؛ لأن السجل محفوظ محليًا بالفعل.
+      // المزامنة التلقائية هتشتغل بعد 15 ثانية لتجنب مسح أي كتابة جارية.
+    } catch (e) {
+      setToast("تم الحفظ محليًا فقط ولم يصل للشيت: " + e.message);
+    }
+  }
+  async function deleteCloud(kind, id) {
+    const config = {
+      feed:   { key: "feeds",   action: "deleteFeed"   },
+      diaper: { key: "diapers", action: "deleteDiaper" },
+      weight: { key: "weights", action: "deleteWeight" }
+    }[kind];
+    if (!config || !id) return;
+    lastLocalEditRef.current = Date.now();
+    const next = { ...data, [config.key]: data[config.key].filter(x => x.id !== id) };
+    setData(next);
+    setLocalData(next);
+    try {
+      await apiRequest(config.action, { id });
+      setToast("تم حذف السجل");
+    } catch (e) {
+      setToast("تم الحذف محليًا: " + e.message);
+    }
+  }
+
+  function removeReminder(id) {
+    lastLocalEditRef.current = Date.now();
+    const next = { ...data, reminders: data.reminders.filter(x => x.id !== id) };
+    setData(next);
+    setLocalData(next);
+    setToast("تم حذف التنبيه");
+  }
+
+  async function updateCloud(kind, row) {
+    const config = {
+      feed: { key: "feeds", action: "updateFeed" },
+      diaper: { key: "diapers", action: "updateDiaper" },
+      weight: { key: "weights", action: "updateWeight" }
+    }[kind];
+
+    if (!config || !row.id) return;
+
+    lastLocalEditRef.current = Date.now();
+
+    const next = {
+      ...data,
+      [config.key]: data[config.key].map(x => x.id === row.id ? { ...x, ...row, updatedAt: new Date().toISOString() } : x)
+    };
+
+    setData(next);
+    setLocalData(next);
+
+    try {
+      await apiRequest(config.action, { ...row, updatedAt: new Date().toISOString() });
+      setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setToast("تم تعديل السجل");
+    } catch (e) {
+      setToast("تم التعديل محليًا فقط ولم يصل للشيت: " + e.message);
+    }
+  }
+
+
+  async function saveSettings(settings) {
+    lastLocalEditRef.current = Date.now();
+    const next = { ...data, settings };
+    setData(next);
+    setLocalData(next);
+    try {
+      await apiRequest("saveSettings", settings);
+      setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setToast("تم حفظ الإعدادات");
+    } catch (e) {
+      setToast("تم حفظ الإعدادات محليًا فقط: " + e.message);
+    }
+  }
+
+  function saveApiUrl() {
+    localStorage.setItem(API_STORAGE_KEY, normalizeAppsScriptUrl(apiUrl));
+    setToast("تم حفظ رابط Google Apps Script");
+  }
+
+  React.useEffect(() => {
+    syncFromCloud({ silent: true, force: true });
+  }, []);
+
+  React.useEffect(() => {
+    const autoSyncTimer = setInterval(() => {
+      const canAutoSync = page === "dashboard" || page === "reports";
+      if (canAutoSync) {
+        syncFromCloud({ silent: true });
+      }
+    }, 10000);
+
+    return () => clearInterval(autoSyncTimer);
+  }, [page, syncPaused]);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      const reminders = data.reminders.filter(r => r.enabled);
+      const todaySummary = calcSummary(data, todayStr());
+      reminders.forEach(r => {
+        const key = "reminder_last_" + r.id;
+        const last = Number(localStorage.getItem(key) || 0);
+        const every = safeNumber(r.everyMinutes);
+        if (!every) return;
+        const now = Date.now();
+        if (now - last > every * 60000) {
+          const text = r.title || "تذكير متابعة";
+          setToast(text);
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("متابعة الطفلة", { body: text });
+          }
+          localStorage.setItem(key, String(now));
+        }
+      });
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [data.reminders]);
+
+  const summary = calcSummary(data, date);
+
+  return (
+    <Box dir="rtl" sx={{ pb: { xs: 13, md: 3 } }}>
+      <AppBar position="sticky" elevation={0} sx={{ bgcolor: "#ffffffd9", color: "#111827", backdropFilter: "blur(12px)", borderBottom: "1px solid #e7ecf5", boxShadow: "0 10px 30px rgba(15,23,42,0.04)" }}>
+        <Toolbar>
+          <Button onClick={()=>setDrawerOpen(true)} sx={{ minWidth: 42, mr: 1, fontSize: 22 }}>☰</Button>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h6" fontWeight={900}>متابعة {data.settings.babyName || "الطفلة"}</Typography>
+            <Typography variant="caption" color="text.secondary">رضاعة • حفاضات • وزن • تقارير</Typography>
+          </Box>
+          {loading && <CircularProgress size={22} />}
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="lg" dir="rtl" sx={{ pt: 2, pr: { md: "270px" }, pl: { md: 2 } }}>
+        {page === "dashboard" && <Dashboard data={data} date={date} setDate={setDate} summary={summary} setPage={setPage} syncFromCloud={syncFromCloud} lastSyncedAt={lastSyncedAt} onEdit={setEditing} />}
+        {page === "feed" && <FeedForm add={(row)=>addCloud("addFeed", "feeds", row)} setSyncPaused={setSyncPaused} />}
+        {page === "diaper" && <DiaperForm add={(row)=>addCloud("addDiaper", "diapers", row)} setSyncPaused={setSyncPaused} />}
+        {page === "weight" && <WeightForm add={(row)=>addCloud("addWeight", "weights", row)} setSyncPaused={setSyncPaused} />}
+        {page === "reports" && <Reports data={data} />}
+        {page === "reminders" && <Reminders data={data} add={(row)=>addCloud("addReminder", "reminders", row)} remove={removeReminder} setSyncPaused={setSyncPaused} />}
+        {page === "settings" && <Settings data={data} saveSettings={saveSettings} apiUrl={apiUrl} setApiUrl={setApiUrl} saveApiUrl={saveApiUrl} syncFromCloud={syncFromCloud} setSyncPaused={setSyncPaused} />}
+      </Container>
+
+      <Drawer anchor="right" open={drawerOpen} onClose={()=>setDrawerOpen(false)}>
+        <Box sx={{ width: 280, pt: 2 }}>
+          <Typography sx={{ px: 2, mb: 1 }} variant="h6" fontWeight={900}>القائمة</Typography>
+          <List>
+            {NAV_ITEMS.map(item => (
+              <ListItemButton
+                key={item.value}
+                selected={page === item.value}
+                onClick={() => { setPage(item.value); setDrawerOpen(false); }}
+                sx={{ mx: 1, borderRadius: 3, direction: "rtl", textAlign: "right" }}
+              >
+                <ListItemIcon sx={{ minWidth: 38, fontSize: 20 }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+        </Box>
+      </Drawer>
+
+      <Paper
+        elevation={10}
+        sx={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1200,
+          borderRadius: "22px 22px 0 0",
+          pb: "env(safe-area-inset-bottom)",
+          display: { xs: "block", md: "none" }
+        }}
+      >
+        <BottomNavigation
+          showLabels
+          value={["dashboard","feed","diaper","weight","reports"].includes(page) ? page : "dashboard"}
+          onChange={(e,v)=>setPage(v)}
+          sx={{
+            height: 74,
+            "& .MuiBottomNavigationAction-root": { minWidth: 0, px: .5 },
+            "& .MuiBottomNavigationAction-label": { fontFamily: "Cairo", fontSize: 11 },
+            "& .Mui-selected": { color: "#1976d2" }
+          }}
+        >
+          {NAV_ITEMS.slice(0,5).map(item => (
+            <BottomNavigationAction key={item.value} label={item.label} value={item.value} icon={<span>{item.icon}</span>} />
+          ))}
+        </BottomNavigation>
+      </Paper>
+
+      <Fab
+        color="primary"
+        onClick={()=>setDrawerOpen(true)}
+        sx={{ position: "fixed", bottom: { xs: 86, md: 24 }, left: 18, display: { xs: "flex", md: "none" } }}
+      >
+        ☰
+      </Fab>
+
+      <Paper
+        elevation={0}
+        sx={{
+          position: "fixed",
+          top: 86,
+          right: 18,
+          width: 230,
+          borderRadius: 4,
+          border: "1px solid #e7e9f2",
+          overflow: "hidden",
+          display: { xs: "none", md: "block" }
+        }}
+      >
+        <List dense>
+          {NAV_ITEMS.map(item => (
+            <ListItemButton
+              key={item.value}
+              selected={page === item.value}
+              onClick={()=>setPage(item.value)}
+              sx={{ mx: 1, my: .5, borderRadius: 3, direction: "rtl", textAlign: "right" }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          ))}
+        </List>
+      </Paper>
+
+      <EditRecordDialog
+        editing={editing}
+        onClose={()=>setEditing(null)}
+        onSave={(kind, row) => { updateCloud(kind, row); setEditing(null); }}
+        onDelete={(kind, id) => { deleteCloud(kind, id); setEditing(null); }}
+      />
+
+      <Snackbar open={!!toast} autoHideDuration={4500} onClose={()=>setToast("")} message={toast} />
+    </Box>
+  );
+}
+
+
+function Dashboard({ data, date, setDate, summary, setPage, syncFromCloud, lastSyncedAt, onEdit }) {
+  const feedAgo = summary.lastFeed ? humanSince(minutesSince(summary.lastFeed.date, summary.lastFeed.time)) : "لا يوجد";
+  const diaperAgo = summary.lastDiaper ? humanSince(minutesSince(summary.lastDiaper.date, summary.lastDiaper.time)) : "لا يوجد";
+
+  const warnings = [];
+  const lastFeedMinutes = summary.lastFeed ? minutesSince(summary.lastFeed.date, summary.lastFeed.time) : null;
+  const lastDiaperMinutes = summary.lastDiaper ? minutesSince(summary.lastDiaper.date, summary.lastDiaper.time) : null;
+  if (lastFeedMinutes !== null && lastFeedMinutes > 180) warnings.push("آخر رضعة من أكثر من 3 ساعات.");
+  if (lastDiaperMinutes !== null && lastDiaperMinutes > 240) warnings.push("آخر حفاضة من أكثر من 4 ساعات.");
+  if (!summary.weight) warnings.push("لم يتم تسجيل وزن بعد.");
+  if (summary.knownMl === 0 && summary.directFeedCount > 0) warnings.push("يوجد رضاعات طبيعية مباشرة اليوم، لذلك كمية اللبن المعروفة لا تمثل كل ما تم رضاعته.");
+
+  const topCards = [
+    { label: "آخر رضعة", value: feedAgo, icon: "🍼", color: "#2563eb", soft: "#eff6ff" },
+    { label: "آخر حفاضة", value: diaperAgo, icon: "🧷", color: "#0891b2", soft: "#ecfeff" },
+    { label: "إجمالي اللبن المعروف", value: `${summary.knownMl} ml`, sub: "مشفوط + صناعي", icon: "🥛", color: "#7c3aed", soft: "#f5f3ff" },
+    { label: "آخر وزن", value: summary.weight ? `${summary.weight} g` : "-", icon: "⚖️", color: "#d97706", soft: "#fffbeb" },
+    { label: "عدد الرضعات", value: summary.feedCount, icon: "📈", color: "#2563eb", soft: "#eff6ff" },
+    { label: "حفاضات بول", value: summary.wet, icon: "💧", color: "#10b981", soft: "#ecfdf5" },
+    { label: "حفاضات براز", value: summary.stool, icon: "🟤", color: "#f97316", soft: "#fff7ed" }
+  ];
+
+  const feedTypeCards = [
+    { label: "طبيعي مباشر", value: summary.directFeedCount, sub: `${summary.directMinutes} دقيقة`, icon: "🤱", color: "#db2777", soft: "#fdf2f8" },
+    { label: "لبن أم مشفوط", value: summary.pumpedFeedCount, sub: `${summary.pumpedMl} ml`, icon: "🧴", color: "#7c3aed", soft: "#f5f3ff" },
+    { label: "صناعي", value: summary.formulaFeedCount, sub: `${summary.formulaMl} ml`, icon: "🍼", color: "#2563eb", soft: "#eff6ff" }
+  ];
+
+  return (
+    <>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, md: 2 },
+          mb: 2,
+          borderRadius: 5,
+          border: "1px solid #e7ecf5",
+          background: "linear-gradient(135deg, #ffffff 0%, #f7fbff 100%)",
+          boxShadow: "0 10px 30px rgba(15,23,42,0.04)"
+        }}
+      >
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ xs: "stretch", md: "center" }} justifyContent="space-between">
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} useFlexGap flexWrap="wrap">
+            <TextField type="date" size="small" value={date} onChange={e=>setDate(e.target.value)} />
+            <Button variant="outlined" onClick={()=>syncFromCloud({ silent: false, force: true })} sx={{ borderRadius: 3 }}>تحديث من الشيت</Button>
+          </Stack>
+          <Chip
+            size="small"
+            color="success"
+            variant="outlined"
+            label={lastSyncedAt ? `آخر تحديث ${lastSyncedAt}` : "مزامنة تلقائية"}
+          />
+        </Stack>
+      </Paper>
+
+      {warnings.map((w,i)=><Alert key={i} severity="info" sx={{ mb: 1, borderRadius: 3 }}>{w}</Alert>)}
+
+      <SectionCard title="تسجيل سريع">
+        <Grid container spacing={1}>
+          <Grid item xs={6} md={3}><Button fullWidth variant="contained" size="large" onClick={()=>setPage("feed")} sx={{ borderRadius: 3, py: 1.2 }}>+ رضعة</Button></Grid>
+          <Grid item xs={6} md={3}><Button fullWidth variant="contained" size="large" onClick={()=>setPage("diaper")} sx={{ borderRadius: 3, py: 1.2 }}>+ حفاضة</Button></Grid>
+          <Grid item xs={6} md={3}><Button fullWidth variant="contained" size="large" onClick={()=>setPage("weight")} sx={{ borderRadius: 3, py: 1.2 }}>+ وزن</Button></Grid>
+          <Grid item xs={6} md={3}><Button fullWidth variant="outlined" size="large" onClick={()=>setPage("reports")} sx={{ borderRadius: 3, py: 1.2 }}>التقارير</Button></Grid>
+        </Grid>
+      </SectionCard>
+
+      <SectionCard title="ملخص اليوم">
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
+            gap: 1.5
+          }}
+        >
+          {topCards.map((card, idx) => <StatCard key={idx} {...card} />)}
+        </Box>
+      </SectionCard>
+
+      <SectionCard title="تفاصيل أنواع الرضعات اليوم">
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)" },
+            gap: 1.5
+          }}
+        >
+          {feedTypeCards.map((card, idx) => <StatCard key={idx} {...card} />)}
+        </Box>
+      </SectionCard>
+
+      <SectionCard title="آخر سجلات اليوم">
+        <TodayRecords summary={summary} onEdit={onEdit} />
+      </SectionCard>
+
+      <SectionCard title="السجلات السابقة" action={<Chip label="لا تشمل سجلات اليوم الحالي" size="small" variant="outlined" />}>
+        <AllRecentRecords data={data} selectedDate={date} onEdit={onEdit} />
+      </SectionCard>
+    </>
+  );
+}
+
+function TodayRecords({ summary, onEdit }) {
+  const records = [
+    ...summary.feeds.map(x => ({...x, kind:"feed", label:"رضعة"})),
+    ...summary.diapers.map(x => ({...x, kind:"diaper", label:"حفاضة"}))
+  ].sort((a,b)=>String(b.time).localeCompare(String(a.time))).slice(0, 20);
+
+  if (!records.length) return <Typography color="text.secondary">لا توجد سجلات لهذا اليوم.</Typography>;
+
+  return (
+    <Stack spacing={1.5}>
+      {records.map(r => (
+        <Paper
+          key={r.id}
+          elevation={0}
+          sx={{
+            p: 1.5,
+            borderRadius: 3,
+            border: "1px solid #e7ecf5",
+            background: "#fff",
+            boxShadow: "0 2px 8px rgba(15,23,42,0.04)"
+          }}
+        >
+          <Stack direction="row" alignItems="flex-start" spacing={1}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap" sx={{ mb: 0.6 }}>
+                <Chip
+                  size="small"
+                  label={r.label}
+                  sx={{
+                    bgcolor: r.kind === "feed" ? "#eff6ff" : "#f0fdfa",
+                    color: r.kind === "feed" ? "#1d4ed8" : "#0f766e",
+                    fontWeight: 800
+                  }}
+                />
+                <Chip size="small" variant="outlined" label={r.time || "--:--"} />
+                <Chip size="small" variant="outlined" label={r.type} />
+              </Stack>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                {r.kind === "feed" && <>
+                  <RecordPill label="الكمية" value={`${safeNumber(r.knownMl)} ml`} color="#dbeafe" textColor="#1d4ed8" />
+                  <RecordPill label="المدة" value={`${safeNumber(r.directMinutes)} دقيقة`} color="#fce7f3" textColor="#be185d" />
+                </>}
+                {r.kind === "diaper" && <RecordPill label="النوع" value={r.type} color="#ccfbf1" textColor="#0f766e" />}
+              </Stack>
+              {r.notes && (
+                <Alert severity="info" sx={{ mt: 1, borderRadius: 3 }}>
+                  <strong>ملاحظة:</strong> {r.notes}
+                </Alert>
+              )}
+            </Box>
+            <Button size="small" variant="outlined" onClick={()=>onEdit({ kind: r.kind, row: r })} sx={{ borderRadius: 3, minWidth: 66, flexShrink: 0 }}>
+              تعديل
+            </Button>
+          </Stack>
+        </Paper>
+      ))}
+    </Stack>
+  );
+}
+
+function AllRecentRecords({ data, selectedDate, onEdit }) {
+  const [mainFilter, setMainFilter] = React.useState("all");
+  const [subFilter, setSubFilter] = React.useState("all");
+
+  React.useEffect(() => {
+    setSubFilter("all");
+  }, [mainFilter]);
+
+  const records = [
+    ...(data.feeds || []).map(x => ({...x, kind:"feed", label:"رضعة"})),
+    ...(data.diapers || []).map(x => ({...x, kind:"diaper", label:"حفاضة"})),
+    ...(data.weights || []).map(x => ({...x, kind:"weight", label:"وزن"}))
+  ]
+    .filter(x => !sameDate(x.date, selectedDate))
+    .sort((a,b)=>(`${toDateKey(b.date)} ${toTimeKey(b.time) || ""}`).localeCompare(`${toDateKey(a.date)} ${toTimeKey(a.time) || ""}`));
+
+  const filtered = records.filter(r => {
+    if (mainFilter !== "all" && r.kind !== mainFilter) return false;
+    if (subFilter === "all") return true;
+    if (r.kind === "feed") return r.type === subFilter;
+    if (r.kind === "diaper") return r.type === subFilter;
+    if (r.kind === "weight") return (r.context || "بدون سياق") === subFilter;
+    return true;
+  }).slice(0, 30);
+
+  let subOptions = ["all"];
+  if (mainFilter === "feed") subOptions = ["all", "طبيعي مباشر", "لبن أم مشفوط", "صناعي"];
+  if (mainFilter === "diaper") subOptions = ["all", ...DIAPER_TYPES];
+  if (mainFilter === "weight") subOptions = ["all", "قبل الرضاعة", "بعد الرضاعة", "بعد تغيير الحفاضة", "بدون سياق"];
+
+  if (!records.length) {
+    return <Typography color="text.secondary">لا توجد سجلات سابقة غير سجلات اليوم الحالي.</Typography>;
+  }
+
+  return (
+    <>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 2 }}>
+        <TextField
+          select
+          size="small"
+          label="نوع السجل"
+          value={mainFilter}
+          onChange={e=>setMainFilter(e.target.value)}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="all">الكل</MenuItem>
+          <MenuItem value="feed">رضعات</MenuItem>
+          <MenuItem value="diaper">حفاضات</MenuItem>
+          <MenuItem value="weight">أوزان</MenuItem>
+        </TextField>
+
+        <TextField
+          select
+          size="small"
+          label="تفصيل النوع"
+          value={subFilter}
+          onChange={e=>setSubFilter(e.target.value)}
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="all">الكل</MenuItem>
+          {subOptions.filter(x => x !== "all").map(option => (
+            <MenuItem key={option} value={option}>{option}</MenuItem>
+          ))}
+        </TextField>
+
+        <Chip variant="outlined" label={`المعروض ${filtered.length} من أصل ${records.length} سجل سابق`} sx={{ width: "fit-content" }} />
+      </Stack>
+
+      <Stack spacing={1.5}>
+        {filtered.map(r => (
+          <Paper
+            key={`${r.kind}-${r.id}`}
+            elevation={0}
+            sx={{
+              p: 1.5,
+              borderRadius: 3,
+              border: "1px solid #e7ecf5",
+              background: "linear-gradient(180deg, #ffffff 0%, #fafcff 100%)",
+              boxShadow: "0 2px 8px rgba(15,23,42,0.04)"
+            }}
+          >
+            <Stack direction="row" alignItems="flex-start" spacing={1}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap" sx={{ mb: 0.6 }}>
+                  <Chip
+                    size="small"
+                    label={r.label}
+                    sx={{
+                      bgcolor: r.kind === "feed" ? "#eff6ff" : r.kind === "diaper" ? "#f0fdfa" : "#fff7ed",
+                      color: r.kind === "feed" ? "#1d4ed8" : r.kind === "diaper" ? "#0f766e" : "#c2410c",
+                      fontWeight: 800
+                    }}
+                  />
+                  <Chip size="small" variant="outlined" label={`${toDateKey(r.date)} • ${toTimeKey(r.time) || "--:--"}`} />
+                  <Chip size="small" variant="outlined" label={r.kind === "weight" ? (r.context || "وزن") : r.type} />
+                </Stack>
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  {r.kind === "feed" && <>
+                    <RecordPill label="الكمية" value={`${safeNumber(r.knownMl)} ml`} color="#dbeafe" textColor="#1d4ed8" />
+                    <RecordPill label="المدة" value={`${safeNumber(r.directMinutes)} دقيقة`} color="#fce7f3" textColor="#be185d" />
+                  </>}
+                  {r.kind === "diaper" && <RecordPill label="النوع" value={r.type} color="#ccfbf1" textColor="#0f766e" />}
+                  {r.kind === "weight" && <>
+                    <RecordPill label="الوزن" value={`${safeNumber(r.grams)} g`} color="#ffedd5" textColor="#c2410c" />
+                    <RecordPill label="السياق" value={r.context || "غير محدد"} color="#dbeafe" textColor="#1d4ed8" />
+                  </>}
+                </Stack>
+                {r.notes && <Typography variant="body2" sx={{ mt: 1, color: "#475569" }}>{r.notes}</Typography>}
+              </Box>
+              <Button size="small" variant="outlined" onClick={()=>onEdit({ kind: r.kind, row: r })} sx={{ borderRadius: 3, minWidth: 66, flexShrink: 0 }}>
+                تعديل
+              </Button>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+    </>
+  );
+}
+
+function EditRecordDialog({ editing, onClose, onSave, onDelete }) {
+  const [form, setForm] = React.useState(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+
+  React.useEffect(() => {
+    setConfirmDelete(false);
+    if (!editing) {
+      setForm(null);
+      return;
+    }
+
+    const row = editing.row || {};
+    if (editing.kind === "feed") {
+      setForm({
+        id: row.id,
+        date: toDateKey(row.date) || todayStr(),
+        time: toTimeKey(row.time) || nowTime(),
+        type: row.type || "طبيعي مباشر",
+        knownMl: row.knownMl ?? row.ml ?? 0,
+        directMinutes: row.directMinutes ?? row.minutes ?? 0,
+        side: row.side || "",
+        quality: row.quality || "",
+        notes: row.notes || "",
+        createdAt: row.createdAt || ""
+      });
+    }
+
+    if (editing.kind === "diaper") {
+      setForm({
+        id: row.id,
+        date: toDateKey(row.date) || todayStr(),
+        time: toTimeKey(row.time) || nowTime(),
+        type: row.type || "بول",
+        stoolColor: row.stoolColor ?? row.color ?? "",
+        stoolTexture: row.stoolTexture ?? row.texture ?? "",
+        notes: row.notes || "",
+        createdAt: row.createdAt || ""
+      });
+    }
+
+    if (editing.kind === "weight") {
+      setForm({
+        id: row.id,
+        date: toDateKey(row.date) || todayStr(),
+        time: toTimeKey(row.time) || nowTime(),
+        grams: row.grams || "",
+        context: row.context || "",
+        notes: row.notes || "",
+        createdAt: row.createdAt || ""
+      });
+    }
+  }, [editing]);
+
+  if (!editing || !form) return null;
+
+  const set = (k, v) => setForm({ ...form, [k]: v });
+
+  function save() {
+    let row = { ...form };
+
+    if (editing.kind === "feed") {
+      row.knownMl = safeNumber(row.knownMl);
+      row.directMinutes = safeNumber(row.directMinutes);
+    }
+
+    if (editing.kind === "weight") {
+      row.grams = safeNumber(row.grams);
+    }
+
+    onSave(editing.kind, row);
+  }
+
+  return (
+    <Dialog open={!!editing} onClose={onClose} fullWidth maxWidth="sm" dir="rtl">
+      <DialogTitle fontWeight={900}>تعديل {editing.kind === "feed" ? "رضعة" : editing.kind === "diaper" ? "حفاضة" : "وزن"}</DialogTitle>
+      <DialogContent>
+        <Grid container spacing={2} sx={{ mt: .5 }}>
+          <Grid item xs={6}>
+            <TextField fullWidth type="date" label="التاريخ" value={form.date} onChange={e=>set("date", e.target.value)} InputLabelProps={{shrink:true}} />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField fullWidth type="time" label="الوقت" value={form.time} onChange={e=>set("time", e.target.value)} InputLabelProps={{shrink:true}} />
+          </Grid>
+
+          {editing.kind === "feed" && (
+            <>
+              <Grid item xs={12}>
+                <TextField select fullWidth label="نوع الرضعة" value={form.type} onChange={e=>set("type", e.target.value)}>
+                  {FEED_TYPES.map(x=><MenuItem key={x} value={x}>{x}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={6}>
+                <TextField fullWidth type="number" label="الكمية المعروفة ml" value={form.knownMl} onChange={e=>set("knownMl", e.target.value)} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField fullWidth type="number" label="مدة الطبيعي بالدقائق" value={form.directMinutes} onChange={e=>set("directMinutes", e.target.value)} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField select fullWidth label="الجهة" value={form.side} onChange={e=>set("side", e.target.value)}>
+                  <MenuItem value="">غير محدد</MenuItem><MenuItem value="يمين">يمين</MenuItem><MenuItem value="شمال">شمال</MenuItem><MenuItem value="يمين وشمال">يمين وشمال</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid item xs={6}>
+                <TextField select fullWidth label="الحالة" value={form.quality} onChange={e=>set("quality", e.target.value)}>
+                  <MenuItem value="">غير محدد</MenuItem><MenuItem value="كويسة">كويسة</MenuItem><MenuItem value="نامت بسرعة">نامت بسرعة</MenuItem><MenuItem value="رفضت">رفضت</MenuItem><MenuItem value="ترجيع">ترجيع</MenuItem><MenuItem value="شرقان/كحة">شرقان/كحة</MenuItem>
+                </TextField>
+              </Grid>
+            </>
+          )}
+
+          {editing.kind === "diaper" && (
+            <>
+              <Grid item xs={12}>
+                <TextField select fullWidth label="نوع الحفاضة" value={form.type} onChange={e=>set("type", e.target.value)}>
+                  {DIAPER_TYPES.map(x=><MenuItem key={x} value={x}>{x}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={6}>
+                <TextField fullWidth label="لون البراز" value={form.stoolColor} onChange={e=>set("stoolColor", e.target.value)} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField select fullWidth label="القوام" value={form.stoolTexture} onChange={e=>set("stoolTexture", e.target.value)}>
+                  <MenuItem value="">غير محدد</MenuItem><MenuItem value="لين">لين</MenuItem><MenuItem value="سائل">سائل</MenuItem><MenuItem value="متماسك">متماسك</MenuItem><MenuItem value="مخاطي">مخاطي</MenuItem>
+                </TextField>
+              </Grid>
+            </>
+          )}
+
+          {editing.kind === "weight" && (
+            <>
+              <Grid item xs={6}>
+                <TextField fullWidth type="number" label="الوزن g" value={form.grams} onChange={e=>set("grams", e.target.value)} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField select fullWidth label="التوقيت" value={form.context} onChange={e=>set("context", e.target.value)}>
+                  <MenuItem value="">غير محدد</MenuItem><MenuItem value="قبل الرضاعة">قبل الرضاعة</MenuItem><MenuItem value="بعد الرضاعة">بعد الرضاعة</MenuItem><MenuItem value="بعد تغيير الحفاضة">بعد تغيير الحفاضة</MenuItem>
+                </TextField>
+              </Grid>
+            </>
+          )}
+
+          <Grid item xs={12}>
+            <TextField fullWidth multiline minRows={3} label="ملاحظات" value={form.notes} onChange={e=>set("notes", e.target.value)} />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1, flexWrap: "wrap" }}>
+        {confirmDelete ? (
+          <>
+            <Typography sx={{ flex: 1, color: "#ef4444", fontWeight: 700, fontSize: 14, textAlign: "right" }}>
+              تأكيد حذف هذا السجل نهائياً؟
+            </Typography>
+            <Button onClick={() => setConfirmDelete(false)} variant="outlined" size="small">إلغاء</Button>
+            <Button onClick={() => { onDelete(editing.kind, editing.row.id); }} variant="contained" color="error" size="small">تأكيد الحذف</Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={() => setConfirmDelete(true)} color="error" sx={{ mr: "auto" }} size="small">🗑 حذف</Button>
+            <Button onClick={onClose} variant="outlined">إلغاء</Button>
+            <Button onClick={save} variant="contained">حفظ التعديل</Button>
+          </>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function FeedForm({ add, setSyncPaused }) {
+  const [form, setForm] = React.useState({ date: todayStr(), time: nowTime(), type: "طبيعي مباشر", knownMl: "", directMinutes: "", side: "", quality: "", notes: "" });
+  const [errors, setErrors] = React.useState({});
+  React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
+  function set(k, v) { setForm({ ...form, [k]: v }); setErrors(e => ({ ...e, [k]: "" })); }
+
+  const isBreast = form.type === "طبيعي مباشر";
+  const isMixed  = form.type === "مختلط";
+
+  function submit() {
+    const e = {};
+    if (!form.date) e.date = "مطلوب";
+    if (!form.time) e.time = "مطلوب";
+    if (!isBreast && !form.knownMl) e.knownMl = "أدخل الكمية";
+    if (isBreast && !form.directMinutes) e.directMinutes = "أدخل المدة";
+    if (Object.keys(e).length) { setErrors(e); return; }
+    add({ ...form, id: uid(), knownMl: safeNumber(form.knownMl), directMinutes: safeNumber(form.directMinutes), createdAt: new Date().toISOString() });
+    setForm({ ...form, time: nowTime(), knownMl: "", directMinutes: "", notes: "" });
+    setErrors({});
+  }
+
+  return <FormCard title="تسجيل رضعة 🍼" submit={submit}>
+    <Grid container spacing={2}>
+      <Grid item xs={6}><TextField fullWidth type="date" size="small" label="التاريخ" value={form.date} onChange={e=>set("date",e.target.value)} InputLabelProps={{shrink:true}} error={!!errors.date} helperText={errors.date} /></Grid>
+      <Grid item xs={6}><TextField fullWidth type="time" size="small" label="الوقت" value={form.time} onChange={e=>set("time",e.target.value)} InputLabelProps={{shrink:true}} /></Grid>
+
+      <Grid item xs={12}>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block", fontWeight: 700 }}>نوع الرضعة</Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          {FEED_TYPES.map(t => (
+            <Chip key={t} label={t} onClick={() => set("type", t)}
+              color={form.type === t ? "primary" : "default"}
+              variant={form.type === t ? "filled" : "outlined"}
+              sx={{ cursor: "pointer", fontWeight: form.type === t ? 800 : 500 }} />
+          ))}
+        </Stack>
+      </Grid>
+
+      {(isBreast || isMixed) && (
+        <>
+          <Grid item xs={6}><TextField fullWidth type="number" size="small" label="مدة الرضاعة (دقيقة)" value={form.directMinutes} onChange={e=>set("directMinutes",e.target.value)} inputProps={{ min: 0 }} error={!!errors.directMinutes} helperText={errors.directMinutes} /></Grid>
+          <Grid item xs={6}>
+            <TextField select fullWidth size="small" label="الجهة" value={form.side} onChange={e=>set("side",e.target.value)}>
+              <MenuItem value="">غير محدد</MenuItem>
+              <MenuItem value="يمين">يمين</MenuItem>
+              <MenuItem value="شمال">شمال</MenuItem>
+              <MenuItem value="يمين وشمال">يمين وشمال</MenuItem>
+            </TextField>
+          </Grid>
+        </>
+      )}
+
+      {(!isBreast || isMixed) && (
+        <Grid item xs={12}><TextField fullWidth type="number" size="small" label="الكمية المعروفة (ml)" value={form.knownMl} onChange={e=>set("knownMl",e.target.value)} inputProps={{ min: 0 }} error={!!errors.knownMl} helperText={errors.knownMl} /></Grid>
+      )}
+
+      <Grid item xs={12}>
+        <TextField select fullWidth size="small" label="حالة الرضعة" value={form.quality} onChange={e=>set("quality",e.target.value)}>
+          <MenuItem value="">غير محدد</MenuItem>
+          <MenuItem value="كويسة">✅ كويسة</MenuItem>
+          <MenuItem value="نامت بسرعة">😴 نامت بسرعة</MenuItem>
+          <MenuItem value="رفضت">❌ رفضت</MenuItem>
+          <MenuItem value="ترجيع">🤮 ترجيع</MenuItem>
+          <MenuItem value="شرقان/كحة">😮 شرقان/كحة</MenuItem>
+        </TextField>
+      </Grid>
+
+      <Grid item xs={12}><TextField fullWidth multiline minRows={2} size="small" label="ملاحظات (اختياري)" value={form.notes} onChange={e=>set("notes",e.target.value)} /></Grid>
+    </Grid>
+  </FormCard>;
+}
+
+function DiaperForm({ add, setSyncPaused }) {
+  const [form, setForm] = React.useState({ date: todayStr(), time: nowTime(), type: "بول", stoolColor: "", stoolTexture: "", notes: "" });
+  React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
+  function set(k, v) { setForm({ ...form, [k]: v }); }
+  function submit() {
+    add({ ...form, id: uid(), createdAt: new Date().toISOString() });
+    setForm({ ...form, time: nowTime(), stoolColor: "", stoolTexture: "", notes: "" });
+  }
+  const hasStool = form.type === "براز" || form.type === "بول + براز";
+  return <FormCard title="تسجيل حفاضة 🧷" submit={submit}>
+    <Grid container spacing={2}>
+      <Grid item xs={6}><TextField fullWidth type="date" size="small" label="التاريخ" value={form.date} onChange={e=>set("date",e.target.value)} InputLabelProps={{shrink:true}} /></Grid>
+      <Grid item xs={6}><TextField fullWidth type="time" size="small" label="الوقت" value={form.time} onChange={e=>set("time",e.target.value)} InputLabelProps={{shrink:true}} /></Grid>
+      <Grid item xs={12}>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block", fontWeight: 700 }}>نوع الحفاضة</Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          {DIAPER_TYPES.map(t => (
+            <Chip key={t} label={t} onClick={() => set("type", t)}
+              color={form.type === t ? "primary" : "default"}
+              variant={form.type === t ? "filled" : "outlined"}
+              sx={{ cursor: "pointer", fontWeight: form.type === t ? 800 : 500 }} />
+          ))}
+        </Stack>
+      </Grid>
+      {hasStool && (
+        <>
+          <Grid item xs={6}><TextField fullWidth size="small" label="لون البراز" value={form.stoolColor} onChange={e=>set("stoolColor",e.target.value)} /></Grid>
+          <Grid item xs={6}>
+            <TextField select fullWidth size="small" label="القوام" value={form.stoolTexture} onChange={e=>set("stoolTexture",e.target.value)}>
+              <MenuItem value="">غير محدد</MenuItem>
+              <MenuItem value="لين">لين</MenuItem>
+              <MenuItem value="سائل">سائل</MenuItem>
+              <MenuItem value="متماسك">متماسك</MenuItem>
+              <MenuItem value="مخاطي">مخاطي</MenuItem>
+            </TextField>
+          </Grid>
+        </>
+      )}
+      <Grid item xs={12}><TextField fullWidth multiline minRows={2} size="small" label="ملاحظات (اختياري)" value={form.notes} onChange={e=>set("notes",e.target.value)} /></Grid>
+    </Grid>
+  </FormCard>;
+}
+
+function WeightForm({ add, setSyncPaused }) {
+  const [form, setForm] = React.useState({ date: todayStr(), time: nowTime(), grams: "", context: "", notes: "" });
+  const [errors, setErrors] = React.useState({});
+  React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
+  function set(k, v) { setForm({ ...form, [k]: v }); setErrors(e => ({ ...e, [k]: "" })); }
+  function submit() {
+    if (!form.grams) { setErrors({ grams: "أدخل الوزن بالجرام" }); return; }
+    add({ ...form, id: uid(), grams: safeNumber(form.grams), createdAt: new Date().toISOString() });
+    setForm({ ...form, time: nowTime(), grams: "", notes: "" });
+    setErrors({});
+  }
+  return <FormCard title="تسجيل وزن ⚖️" submit={submit}>
+    <Grid container spacing={2}>
+      <Grid item xs={6}><TextField fullWidth type="date" size="small" label="التاريخ" value={form.date} onChange={e=>set("date",e.target.value)} InputLabelProps={{shrink:true}} /></Grid>
+      <Grid item xs={6}><TextField fullWidth type="time" size="small" label="الوقت" value={form.time} onChange={e=>set("time",e.target.value)} InputLabelProps={{shrink:true}} /></Grid>
+      <Grid item xs={12} sm={6}><TextField fullWidth type="number" size="small" label="الوزن (جرام)" value={form.grams} onChange={e=>set("grams",e.target.value)} inputProps={{ min: 0 }} error={!!errors.grams} helperText={errors.grams} /></Grid>
+      <Grid item xs={12} sm={6}>
+        <TextField select fullWidth size="small" label="توقيت القياس" value={form.context} onChange={e=>set("context",e.target.value)}>
+          <MenuItem value="">غير محدد</MenuItem>
+          <MenuItem value="قبل الرضاعة">قبل الرضاعة</MenuItem>
+          <MenuItem value="بعد الرضاعة">بعد الرضاعة</MenuItem>
+          <MenuItem value="بعد تغيير الحفاضة">بعد تغيير الحفاضة</MenuItem>
+        </TextField>
+      </Grid>
+      <Grid item xs={12}><TextField fullWidth multiline minRows={2} size="small" label="ملاحظات (اختياري)" value={form.notes} onChange={e=>set("notes",e.target.value)} /></Grid>
+    </Grid>
+  </FormCard>;
+}
+
+function FormCard({ title, children, submit }) {
+  return (
+    <SectionCard title={title}>
+      <Stack spacing={2}>
+        {children}
+        <Button variant="contained" size="large" onClick={submit}>حفظ</Button>
+      </Stack>
+    </SectionCard>
+  );
+}
+
+function Reports({ data }) {
+  const [days, setDays] = React.useState(7);
+  const [copyDone, setCopyDone] = React.useState(false);
+
+  const stats      = getReportStats(data, days);
+  const series     = stats.series;
+  const h24        = getLast24hStats(data);
+  const rhythm     = getFeedingRhythm(stats.feeds);
+  const breast     = getBreastBalance(stats.feeds);
+  const weekComp   = getWeekComparison(data);
+  const stoolData  = getStoolAnalysis(stats.diapers, days);
+
+  const settings   = data.settings || {};
+  const sortedW    = [...(data.weights||[])].sort((a,b)=>(`${toDateKey(b.date)} ${b.time}`).localeCompare(`${toDateKey(a.date)} ${a.time}`));
+  const lastWeightG= sortedW[0] ? safeNumber(sortedW[0].grams) : 0;
+  const target     = safeNumber(settings.targetMlPerKg);
+  const targetMlDay= target && lastWeightG ? Math.round(target*(lastWeightG/1000)) : 0;
+  const avgActual  = round1(stats.avgKnown);
+  const targetPct  = targetMlDay>0 ? Math.min(100,Math.round((avgActual/targetMlDay)*100)) : 0;
+
+  const ageMs         = settings.birthDate ? Date.now()-new Date(settings.birthDate).getTime() : 0;
+  const chronoMonths  = ageMs>0 ? ageMs/(30.44*86400000) : null;
+  const gWeeks        = safeNumber(settings.gestationalAgeWeeks);
+  const correctedMonths = chronoMonths!==null && gWeeks>0 && gWeeks<40
+    ? Math.max(0, chronoMonths-(40-gWeeks)/4.33) : chronoMonths;
+  const who = getWhoPercentile(lastWeightG, correctedMonths);
+
+  const doctorSummary = buildDoctorSummary(data, days);
+  async function copyReport() {
+    try { await navigator.clipboard.writeText(doctorSummary); } catch {}
+    setCopyDone(true); setTimeout(()=>setCopyDone(false),2500);
+  }
+  function downloadReport() {
+    const blob=new Blob([doctorSummary],{type:"text/plain;charset=utf-8"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=`baby-report-${days}-days.txt`; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  const STATUS = {
+    ok:   {bg:"#f0fdf4",border:"#86efac",text:"#166534",badge:"#22c55e",icon:"✅"},
+    warn: {bg:"#fffbeb",border:"#fcd34d",text:"#92400e",badge:"#f59e0b",icon:"⚠️"},
+    bad:  {bg:"#fef2f2",border:"#fca5a5",text:"#991b1b",badge:"#ef4444",icon:"❌"},
+    info: {bg:"#f0f9ff",border:"#7dd3fc",text:"#075985",badge:"#3b82f6",icon:"ℹ️"},
+  };
+  const STOOL_FILL = {"أصفر":"#fef08a","بني":"#78350f","أخضر":"#86efac","أسود":"#1e293b","أحمر":"#ef4444","أبيض":"#e2e8f0","رمادي":"#94a3b8"};
+
+  return (
+    <>
+      {/* ── 1. آخر 24 ساعة ── */}
+      <SectionCard title="آخر 24 ساعة 📍">
+        <Box sx={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:1.25,mb:2}}>
+          {[
+            {label:"رضعات",       value:h24.feeds.length,      icon:"🍼",color:"#2563eb",soft:"#eff6ff"},
+            {label:"لبن معروف",   value:`${h24.totalMl} ml`,   icon:"🥛",color:"#7c3aed",soft:"#f5f3ff"},
+            {label:"حفاضات بول", value:h24.wet,                icon:"💧",color:"#10b981",soft:"#ecfdf5"},
+            {label:"حفاضات براز",value:h24.stool,              icon:"🟤",color:"#f97316",soft:"#fff7ed"},
+          ].map((c,i)=>(
+            <Paper key={i} elevation={0} sx={{p:1.5,borderRadius:2.5,border:"1px solid #e7ecf5",background:`linear-gradient(135deg,#fff 0%,${c.soft} 100%)`}}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{mb:0.5}}>
+                <Box sx={{width:28,height:28,borderRadius:1.5,bgcolor:c.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{c.icon}</Box>
+                <Typography variant="caption" sx={{color:"#64748b",fontWeight:700,textAlign:"right",flex:1,pr:0.75}}>{c.label}</Typography>
+              </Stack>
+              <Typography sx={{fontWeight:900,fontSize:22,color:"#0f172a",textAlign:"right",lineHeight:1}}>{c.value}</Typography>
+            </Paper>
+          ))}
+        </Box>
+
+        <Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr 1fr",md:"repeat(3,1fr)"},gap:1,mb:2}}>
+          {[
+            {label:"متوسط الفاصل",       value:h24.avgInterval?fmtMin(h24.avgInterval):"—",        icon:"⏱",warn:false},
+            {label:"أطول فاصل",          value:h24.maxInterval?fmtMin(h24.maxInterval):"—",        icon:"⏳",warn:h24.maxInterval>240},
+            {label:"آخر رضعة",           value:h24.lastFeed?fmtTime(h24.lastFeed.date,h24.lastFeed.time):"لا يوجد", icon:"🍼",warn:false},
+            {label:"الرضعة القادمة",     value:h24.predictedNext?`${String(h24.predictedNext.getHours()).padStart(2,"0")}:${String(h24.predictedNext.getMinutes()).padStart(2,"0")}`:"—", icon:"🔮",warn:false},
+            {label:"آخر تغيير حفاضة",   value:h24.lastDiaper?fmtTime(h24.lastDiaper.date,h24.lastDiaper.time):"لا يوجد", icon:"🧷",warn:false},
+            {label:"رضاعة طبيعية",       value:h24.totalDirectMin?fmtMin(h24.totalDirectMin):"—",  icon:"🤱",warn:false},
+          ].map((c,i)=>(
+            <Box key={i} sx={{p:1.25,borderRadius:2,bgcolor:c.warn?"#fef2f2":"#f8fafc",border:`1px solid ${c.warn?"#fca5a5":"#e2e8f0"}`}}>
+              <Typography variant="caption" sx={{color:"#64748b",fontWeight:600,display:"block"}}>{c.icon} {c.label}</Typography>
+              <Typography fontWeight={800} fontSize={14} sx={{color:c.warn?"#991b1b":"#0f172a",textAlign:"right"}}>{c.value}</Typography>
+            </Box>
+          ))}
+        </Box>
+
+        {h24.timeline.length>0 ? (
+          <Box>
+            <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{display:"block",mb:1}}>جدول الأحداث</Typography>
+            <Box sx={{maxHeight:240,overflowY:"auto"}}>
+              <Stack spacing={0.75}>
+                {[...h24.timeline].reverse().map((x,i)=>{
+                  const isFeed=x.kind==="feed";
+                  const c=isFeed?"#2563eb":x.type?.includes("براز")?"#f97316":"#10b981";
+                  const ic=isFeed?"🍼":x.type?.includes("براز")?"🟤":"💧";
+                  const desc=isFeed
+                    ?`${x.type}${x.knownMl?` · ${x.knownMl} ml`:""}${x.directMinutes?` · ${x.directMinutes} د`:""}`
+                    :`${x.type}${x.stoolColor?` · ${x.stoolColor}`:""}`;
+                  return (
+                    <Stack key={i} direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="caption" sx={{color:"#94a3b8",fontWeight:700,minWidth:40,textAlign:"left",flexShrink:0}}>{fmtTime(x.date,x.time)}</Typography>
+                      <Box sx={{width:22,height:22,borderRadius:"50%",bgcolor:c+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>{ic}</Box>
+                      <Typography variant="caption" sx={{color:"#334155",fontWeight:600,flex:1,textAlign:"right"}}>{desc}</Typography>
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Box>
+          </Box>
+        ) : (
+          <Typography color="text.secondary" fontSize={13} sx={{textAlign:"center",py:1}}>لا توجد سجلات في آخر 24 ساعة</Typography>
+        )}
+      </SectionCard>
+
+      {/* ── 2. Period selector ── */}
+      <Paper elevation={0} sx={{p:{xs:1.5,md:2},mb:2,borderRadius:3,border:"1px solid #e7ecf5",background:"#fff"}}>
+        <Typography variant="caption" color="text.secondary" sx={{display:"block",mb:1.25,fontWeight:700}}>الفترة الزمنية للتحليل</Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          {[7,14,30,60].map(d=>(
+            <Button key={d} variant={days===d?"contained":"outlined"} onClick={()=>setDays(d)} sx={{borderRadius:3}}>{d} يوم</Button>
+          ))}
+        </Stack>
+      </Paper>
+
+      {/* ── 3. Week comparison ── */}
+      <SectionCard title="مقارنة هذا الأسبوع بالأسبوع الماضي 📊">
+        <Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr 1fr",md:"repeat(4,1fr)"},gap:1.25}}>
+          {[
+            {label:"عدد الرضعات",    thisVal:weekComp.thisFeeds,       lastVal:weekComp.lastFeeds,  delta:weekComp.feedsDelta, pos:true},
+            {label:"متوسط اللبن/يوم",thisVal:`${weekComp.thisMl} ml`,  lastVal:`${weekComp.lastMl} ml`, pct:weekComp.mlPct, pos:true},
+            {label:"بول/يوم",        thisVal:weekComp.thisWet,         lastVal:weekComp.lastWet,    delta:weekComp.wetDelta,   pos:true},
+            {label:"براز/يوم",       thisVal:weekComp.thisStool,       lastVal:weekComp.lastStool,  delta:round1(weekComp.thisStool-weekComp.lastStool), pos:null},
+          ].map((c,i)=>{
+            const d=c.pct!==undefined?c.pct:c.delta;
+            const isPos=d>0,isNeg=d<0;
+            const good=c.pos===null?null:(isPos?true:isNeg?false:null);
+            return (
+              <Box key={i} sx={{p:1.5,borderRadius:2.5,border:"1px solid #e7ecf5",bgcolor:"#fafbff"}}>
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{display:"block",mb:0.75,textAlign:"right"}}>{c.label}</Typography>
+                <Typography fontWeight={900} fontSize={18} sx={{textAlign:"right",color:"#0f172a"}}>{c.thisVal}</Typography>
+                <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={0.5} sx={{mt:0.5}}>
+                  <Typography variant="caption" color="text.secondary">كان {c.lastVal}</Typography>
+                  {d!==null&&d!==undefined&&d!==0&&(
+                    <Chip size="small" label={`${isPos?"↑":"↓"} ${Math.abs(d)}${c.pct!==undefined?"%":""}`}
+                      sx={{bgcolor:good===null?"#f1f5f9":good?"#dcfce7":"#fee2e2",color:good===null?"#475569":good?"#166534":"#991b1b",fontWeight:800,fontSize:10,height:18}}/>
+                  )}
+                </Stack>
+              </Box>
+            );
+          })}
+        </Box>
+      </SectionCard>
+
+      {/* ── 4. Health indicators ── */}
+      <SectionCard title="المؤشرات الصحية">
+        <Box sx={{display:"grid",gridTemplateColumns:{xs:"repeat(2,1fr)",md:"repeat(4,1fr)"},gap:1.5}}>
+          {[
+            {label:"حفاضات البول",  value:round1(stats.avgWet),  unit:"/يوم", st:stats.avgWet>=6?"ok":stats.avgWet>=4?"warn":"bad",   hint:"المعدل الطبيعي ≥ 6/يوم",   icon:"💧",target:"≥ 6"},
+            {label:"زيادة الوزن",   value:stats.gainPerDay===null?"—":round1(stats.gainPerDay), unit:"g/يوم", st:stats.gainPerDay===null?"info":stats.gainPerDay>=15?"ok":stats.gainPerDay>=0?"warn":"bad", hint:"الطبيعي: 20-30 g/يوم", icon:"📈",target:"20-30"},
+            {label:"عدد الرضعات",  value:round1(stats.avgFeeds), unit:"/يوم", st:stats.avgFeeds>=8?"ok":stats.avgFeeds>=6?"warn":"bad", hint:"الطبيعي: 8-12 رضعة/يوم", icon:"🍼",target:"8-12"},
+            {label:"اللبن المعروف", value:round1(stats.avgKnown),unit:"ml/يوم",st:targetMlDay>0?(avgActual>=targetMlDay*0.9?"ok":avgActual>=targetMlDay*0.7?"warn":"bad"):"info", hint:targetMlDay>0?`الهدف: ${targetMlDay} ml/يوم`:"ضع هدف الطبيب في الإعدادات", icon:"🥛",target:targetMlDay>0?`${targetMlDay}`:"—"},
+          ].map((c,i)=>{const s=STATUS[c.st];return(
+            <Box key={i} sx={{p:1.5,borderRadius:3,border:`1.5px solid ${s.border}`,bgcolor:s.bg,display:"flex",flexDirection:"column",gap:0.5}}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{mb:0.25}}>
+                <Box sx={{width:26,height:26,borderRadius:99,bgcolor:s.badge,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{s.icon}</Box>
+                <Typography variant="caption" sx={{color:s.text,fontWeight:700,textAlign:"right",flex:1,pr:0.75}}>{c.label}</Typography>
+              </Stack>
+              <Typography sx={{fontWeight:900,fontSize:{xs:20,md:22},color:s.text,textAlign:"right",lineHeight:1.1}}>
+                {c.value}<Typography component="span" variant="caption" sx={{fontWeight:600,opacity:0.8}}> {c.unit}</Typography>
+              </Typography>
+              <Chip size="small" label={`هدف: ${c.target}`} sx={{bgcolor:s.badge+"22",color:s.text,fontWeight:700,fontSize:10,height:20,alignSelf:"flex-end"}}/>
+              <Typography variant="caption" sx={{color:s.text,opacity:0.75,textAlign:"right",lineHeight:1.35,fontSize:10}}>{c.hint}</Typography>
+            </Box>
+          );})}
+        </Box>
+      </SectionCard>
+
+      {/* ── 5. Feeding rhythm ── */}
+      {rhythm && (
+        <SectionCard title="إيقاع الرضعات ⏱">
+          <Box sx={{display:"grid",gridTemplateColumns:{xs:"repeat(2,1fr)",md:"repeat(4,1fr)"},gap:1.25,mb:rhythm.max>240?1.5:0}}>
+            {[
+              {label:"متوسط الفاصل", value:fmtMin(rhythm.avg), color:"#2563eb"},
+              {label:"أطول فاصل",    value:fmtMin(rhythm.max), color:rhythm.max>240?"#dc2626":"#f97316"},
+              {label:"أقصر فاصل",   value:fmtMin(rhythm.min), color:"#10b981"},
+              {label:"الانتظام",     value:rhythm.consistency, color:STATUS[rhythm.consistencySt].text},
+            ].map((c,i)=>(
+              <Box key={i} sx={{p:1.25,borderRadius:2,bgcolor:"#f8fafc",border:"1px solid #e2e8f0",textAlign:"right"}}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{c.label}</Typography>
+                <Typography fontWeight={800} fontSize={14} sx={{color:c.color,mt:0.25}}>{c.value}</Typography>
+              </Box>
+            ))}
+          </Box>
+          {rhythm.max>240&&<Alert severity="warning" sx={{borderRadius:2.5,fontSize:13}}>أطول فاصل تجاوز 4 ساعات — الرضع الصغار يحتاجون رضعة كل 2-3 ساعات عادةً.</Alert>}
+        </SectionCard>
+      )}
+
+      {/* ── 6. Breast balance ── */}
+      {breast && (
+        <SectionCard title="توازن الرضاعة الطبيعية 🤱">
+          <Stack direction="row" justifyContent="space-between" sx={{mb:0.75}}>
+            <Typography variant="caption" fontWeight={700} color="#2563eb">يمين — {breast.right} ({breast.rightPct}%) · {breast.rMins} د</Typography>
+            <Typography variant="caption" fontWeight={700} color="#7c3aed">شمال — {breast.left} ({breast.leftPct}%) · {breast.lMins} د</Typography>
+          </Stack>
+          <Box sx={{height:16,borderRadius:99,overflow:"hidden",display:"flex",mb:1}}>
+            <Box sx={{width:`${breast.rightPct}%`,bgcolor:"#2563eb",transition:"width 0.6s"}}/>
+            <Box sx={{flex:1,bgcolor:"#7c3aed"}}/>
+          </Box>
+          {Math.abs(breast.rightPct-breast.leftPct)>30&&(
+            <Alert severity="info" sx={{borderRadius:2.5,fontSize:13}}>فرق ملحوظ بين الجهتين — يُنصح بتنويع البداية لتحفيز إنتاج متساوٍ.</Alert>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── 7. Stool analysis ── */}
+      {stoolData && (
+        <SectionCard title="تحليل البراز 💩">
+          {stoolData.alarming.length>0&&(
+            <Alert severity="error" sx={{mb:1.5,borderRadius:2.5}}>⚠️ براز بلون غير طبيعي ({stoolData.alarming.join("، ")}) — يُنصح بمراجعة الطبيب.</Alert>
+          )}
+          <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{display:"block",mb:1}}>آخر سجلات البراز</Typography>
+          <Stack spacing={0.75} sx={{mb:1.5}}>
+            {stoolData.sorted5.map((x,i)=>{
+              const k=x.stoolColor?Object.keys(stoolData.COLORS).find(k=>x.stoolColor.includes(k)):null;
+              const info=k?stoolData.COLORS[k]:null;
+              const s=info?STATUS[info.st]:STATUS.info;
+              const fillKey=x.stoolColor?Object.keys(STOOL_FILL).find(k=>x.stoolColor.includes(k)):null;
+              return(
+                <Stack key={i} direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="caption" sx={{color:"#94a3b8",fontWeight:700,minWidth:40,textAlign:"left",flexShrink:0}}>{fmtTime(x.date,x.time)}</Typography>
+                  {fillKey&&<Box sx={{width:14,height:14,borderRadius:"50%",bgcolor:STOOL_FILL[fillKey],border:"1px solid #00000022",flexShrink:0}}/>}
+                  <Typography variant="caption" fontWeight={700} sx={{color:s.text,flex:1,textAlign:"right"}}>
+                    {x.stoolColor||"بدون لون"}{x.stoolTexture?` · ${x.stoolTexture}`:""}
+                  </Typography>
+                  {info&&<Typography variant="caption" sx={{color:s.text,opacity:0.7,fontSize:10,flexShrink:0,maxWidth:110,textAlign:"right"}}>{info.note}</Typography>}
+                </Stack>
+              );
+            })}
+          </Stack>
+          {Object.keys(stoolData.colorCount).length>0&&(
+            <>
+              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{display:"block",mb:0.75}}>توزيع الألوان</Typography>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{mb:1.25}}>
+                {Object.entries(stoolData.colorCount).map(([color,count])=>{
+                  const k=Object.keys(stoolData.COLORS).find(k=>color.includes(k));
+                  const s=k?STATUS[stoolData.COLORS[k].st]:STATUS.info;
+                  return <Chip key={color} label={`${color} (${count})`} size="small" sx={{bgcolor:s.bg,color:s.text,border:`1px solid ${s.border}`,fontWeight:700}}/>;
+                })}
+              </Stack>
+            </>
+          )}
+          <Box sx={{p:1.25,borderRadius:2,bgcolor:"#f8fafc",border:"1px solid #e2e8f0"}}>
+            <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{display:"block",mb:0.75}}>مرجع طبي سريع</Typography>
+            <Stack spacing={0.5}>
+              {Object.entries(stoolData.COLORS).map(([color,info])=>{const s=STATUS[info.st];return(
+                <Stack key={color} direction="row" alignItems="flex-start" spacing={1}>
+                  <Chip size="small" label={color} sx={{bgcolor:s.bg,color:s.text,border:`1px solid ${s.border}`,fontWeight:700,minWidth:50,fontSize:10,height:18,flexShrink:0}}/>
+                  <Typography variant="caption" sx={{color:"#64748b",flex:1,fontSize:10,lineHeight:1.5,textAlign:"right"}}>{info.note}</Typography>
+                </Stack>
+              );})}
+            </Stack>
+          </Box>
+        </SectionCard>
+      )}
+
+      {/* ── 8. WHO growth percentile ── */}
+      {who && lastWeightG>0 && (
+        <SectionCard title="منحنى النمو WHO 📏">
+          {gWeeks>0&&gWeeks<37&&(
+            <Alert severity="info" sx={{mb:1.5,borderRadius:2.5,fontSize:13}}>الطفلة ولدت مبكراً ({gWeeks} أسبوع) — الحسابات تستخدم العمر التصحيحي.</Alert>
+          )}
+          <Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr 1fr",md:"repeat(4,1fr)"},gap:1.25,mb:1.5}}>
+            {[
+              {label:"الوزن الحالي",  value:`${lastWeightG} g`,                                                           color:"#2563eb"},
+              {label:"P50 (المتوسط)", value:`${who.p50} g`,                                                               color:"#64748b"},
+              {label:"الفرق عن P50",  value:`${who.diffFromP50>=0?"+":""}${who.diffFromP50} g`,                          color:who.diffFromP50>=0?"#16a34a":"#dc2626"},
+              {label:"النطاق",        value:who.band,                                                                    color:STATUS[who.bandSt].text},
+            ].map((c,i)=>(
+              <Box key={i} sx={{p:1.25,borderRadius:2,bgcolor:"#f8fafc",border:"1px solid #e2e8f0",textAlign:"right"}}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{display:"block"}}>{c.label}</Typography>
+                <Typography fontWeight={800} fontSize={14} sx={{color:c.color,mt:0.25}}>{c.value}</Typography>
+              </Box>
+            ))}
+          </Box>
+          <Box sx={{position:"relative",height:28,borderRadius:99,overflow:"hidden",display:"flex",mb:0.75}}>
+            {[["#fca5a5",5],["#fde68a",15],["#86efac",45],["#fde68a",15],["#fca5a5",20]].map(([bg,w],i)=>(
+              <Box key={i} sx={{width:`${w}%`,bgcolor:bg}}/>
+            ))}
+            {(()=>{
+              const g=lastWeightG;
+              let pct=50;
+              if(g<who.p3) pct=2;
+              else if(g<who.p50) pct=5+(g-who.p3)/(who.p50-who.p3)*45;
+              else pct=50+(g-who.p50)/(who.p97-who.p50)*45;
+              pct=Math.min(97,Math.max(3,pct));
+              return <Box sx={{position:"absolute",top:"50%",left:`${pct}%`,transform:"translate(-50%,-50%)",width:18,height:18,borderRadius:"50%",bgcolor:"#1e293b",border:"3px solid #fff",boxShadow:"0 2px 6px rgba(0,0,0,0.3)"}}/>;
+            })()}
+          </Box>
+          <Stack direction="row" justifyContent="space-between" sx={{mb:1}}>
+            {["P3","P15","P50","P85","P97"].map(l=><Typography key={l} variant="caption" color="text.secondary">{l}</Typography>)}
+          </Stack>
+          <Box sx={{p:1,borderRadius:2,bgcolor:STATUS[who.bandSt].bg,border:`1px solid ${STATUS[who.bandSt].border}`}}>
+            <Typography variant="caption" sx={{color:STATUS[who.bandSt].text,fontWeight:700}}>
+              {STATUS[who.bandSt].icon} {who.bandLabel} — النطاق الطبيعي هو P15–P85
+            </Typography>
+          </Box>
+        </SectionCard>
+      )}
+
+      {/* ── 9. Target progress ── */}
+      {targetMlDay>0&&(
+        <SectionCard title="التقدم نحو هدف الطبيب 🎯">
+          <Stack direction="row" justifyContent="space-between" sx={{mb:0.75}}>
+            <Typography variant="caption" color="text.secondary" fontWeight={700}>متوسط اللبن الفعلي: {avgActual} ml/يوم</Typography>
+            <Typography variant="caption" fontWeight={900} sx={{color:targetPct>=90?"#16a34a":targetPct>=70?"#d97706":"#dc2626"}}>{targetPct}% من {targetMlDay} ml</Typography>
+          </Stack>
+          <Box sx={{height:12,borderRadius:99,bgcolor:"#e2e8f0",overflow:"hidden"}}>
+            <Box sx={{height:"100%",width:`${targetPct}%`,borderRadius:99,transition:"width 0.6s",
+              background:targetPct>=90?"linear-gradient(90deg,#22c55e,#16a34a)":targetPct>=70?"linear-gradient(90deg,#fbbf24,#d97706)":"linear-gradient(90deg,#f87171,#dc2626)"}}/>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{display:"block",mt:0.75,textAlign:"left"}}>
+            {targetPct<70?"⚠️ الكمية أقل من المستهدف — راجع الطبيب":targetPct<90?"🟡 قريب من الهدف":"✅ تم تحقيق الهدف"}
+          </Typography>
+        </SectionCard>
+      )}
+
+      {/* ── 10. Summary stats ── */}
+      <SectionCard title="ملخص الفترة">
+        <Box sx={{display:"grid",gridTemplateColumns:{xs:"repeat(2,1fr)",md:"repeat(4,1fr)"},gap:1.5}}>
+          <StatCard label="إجمالي الرضعات"      value={stats.feeds.length}  icon="🍼" color="#2563eb" soft="#eff6ff"/>
+          <StatCard label="إجمالي اللبن المعروف" value={`${stats.knownMl} ml`} icon="🥛" color="#7c3aed" soft="#f5f3ff"/>
+          <StatCard label="رضاعة طبيعية مباشرة" value={stats.direct.length} sub={`${stats.directMinutes} دقيقة`} icon="🤱" color="#db2777" soft="#fdf2f8"/>
+          <StatCard label="رضعات بكمية معروفة"  value={stats.bottle.length} sub={`${stats.knownMl} ml`} icon="🧴" color="#0891b2" soft="#ecfeff"/>
+          <StatCard label="حفاضات بول"           value={stats.wet}  sub={`متوسط ${round1(stats.avgWet)}/يوم`}   icon="💧" color="#10b981" soft="#ecfdf5"/>
+          <StatCard label="حفاضات براز"          value={stats.stool} sub={`متوسط ${round1(stats.avgStool)}/يوم`} icon="🟤" color="#f97316" soft="#fff7ed"/>
+          <StatCard label="فرق الوزن"            value={stats.gain===null?"—":`${stats.gain>0?"+":""}${stats.gain} g`} icon="⚖️" color="#d97706" soft="#fffbeb"/>
+          <StatCard label="متوسط الزيادة"        value={stats.gainPerDay===null?"—":`${round1(stats.gainPerDay)} g`} sub="/يوم" icon="📈" color="#2563eb" soft="#eff6ff"/>
+        </Box>
+      </SectionCard>
+
+      {/* ── 11. Charts ── */}
+      <SectionCard title="الرسوم البيانية">
+        <Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"repeat(2,1fr)"},gap:2.5}}>
+          <Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#d97706"}}>⚖️ تطور الوزن</Typography>
+            <ChartCanvas type="line" labels={series.map(x=>x.date)} datasets={[{label:"الوزن g",data:series.map(x=>x.weight),tension:0.4,spanGaps:true,borderColor:"#d97706",backgroundColor:"#d9770618",fill:true,pointBackgroundColor:"#d97706"}]}/></Box>
+          <Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#7c3aed"}}>🥛 كمية اللبن يوميًا</Typography>
+            <ChartCanvas type="bar" labels={series.map(x=>x.date)} datasets={[{label:"ml",data:series.map(x=>x.knownMl),backgroundColor:"#7c3aed88",borderRadius:6,borderSkipped:false}]}/></Box>
+          <Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#2563eb"}}>🍼 عدد الرضعات يوميًا</Typography>
+            <ChartCanvas type="bar" labels={series.map(x=>x.date)} datasets={[{label:"رضعات",data:series.map(x=>x.feeds),backgroundColor:"#2563eb88",borderRadius:6,borderSkipped:false}]}/></Box>
+          <Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#10b981"}}>🧷 الحفاضات يوميًا</Typography>
+            <ChartCanvas type="bar" labels={series.map(x=>x.date)} datasets={[{label:"بول",data:series.map(x=>x.wet),backgroundColor:"#10b98188",borderRadius:6,borderSkipped:false},{label:"براز",data:series.map(x=>x.stool),backgroundColor:"#f9731688",borderRadius:6,borderSkipped:false}]}/></Box>
+          {stats.directMinutes>0&&<Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#db2777"}}>🤱 مدة الرضاعة الطبيعية</Typography>
+            <ChartCanvas type="line" labels={series.map(x=>x.date)} datasets={[{label:"دقائق",data:series.map(x=>x.directMinutes),tension:0.4,borderColor:"#db2777",backgroundColor:"#db277718",fill:true}]}/></Box>}
+          {(()=>{
+            const fp=FEED_TYPES.map(t=>({name:t,value:stats.feeds.filter(x=>x.type===t).length})).filter(x=>x.value>0);
+            const td=[{name:"ليل 12-6",value:stats.nightFeeds},{name:"صباح 6-12",value:stats.morningFeeds},{name:"ظهر 12-6",value:stats.afternoonFeeds},{name:"مساء 6-12",value:stats.eveningFeeds}].filter(x=>x.value>0);
+            return(<>
+              {fp.length>0&&<Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#0891b2"}}>🍼 توزيع أنواع الرضعات</Typography>
+                <ChartCanvas type="pie" labels={fp.map(x=>x.name)} datasets={[{label:"الأنواع",data:fp.map(x=>x.value)}]}/></Box>}
+              {td.length>0&&<Box><Typography variant="body2" fontWeight={800} sx={{mb:1,textAlign:"right",color:"#7c3aed"}}>🕐 توزيع الرضعات حسب الوقت</Typography>
+                <ChartCanvas type="pie" labels={td.map(x=>x.name)} datasets={[{label:"الوقت",data:td.map(x=>x.value)}]}/></Box>}
+            </>);
+          })()}
+        </Box>
+      </SectionCard>
+
+      {/* ── 12. Doctor report ── */}
+      <SectionCard title="تقرير للطبيب 🏥"
+        action={<Stack direction="row" spacing={1}>
+          <Button size="small" variant={copyDone?"contained":"outlined"} color={copyDone?"success":"primary"} onClick={copyReport} sx={{borderRadius:3}}>{copyDone?"✅ تم النسخ":"نسخ"}</Button>
+          <Button size="small" variant="outlined" onClick={downloadReport} sx={{borderRadius:3}}>تحميل</Button>
+        </Stack>}
+      >
+        <Alert severity="info" sx={{mb:1.5,borderRadius:3,fontSize:13}}>التقرير يوضح الكميات المعروفة فقط — لا يحسب الرضاعة الطبيعية المباشرة.</Alert>
+        <Paper variant="outlined" sx={{p:2,borderRadius:3,bgcolor:"#fbfcff",direction:"rtl",textAlign:"right"}}>
+          {doctorSummary.split("\n").map((line,i)=>(
+            <Typography key={i} sx={{mb:i===0?1:0.5,fontWeight:i===0?900:500,lineHeight:1.9,fontSize:i===0?15:13}}>{line}</Typography>
+          ))}
+        </Paper>
+      </SectionCard>
+    </>
+  );
+}
+
+function ChartCard({ title, children }) {
+  return <SectionCard title={title}>{children}</SectionCard>;
+}
+
+function Reminders({ data, add, remove, setSyncPaused }) {
+  const PRESETS = [
+    { label: "كل ساعة", minutes: 60 },
+    { label: "ساعتين", minutes: 120 },
+    { label: "3 ساعات", minutes: 180 },
+    { label: "4 ساعات", minutes: 240 },
+  ];
+  const [form, setForm] = React.useState({ title: "راجع الحفاضة", everyMinutes: 180, enabled: true, startTime: "08:00", endTime: "23:59" });
+  const [notifStatus, setNotifStatus] = React.useState(null); // null | "granted" | "denied"
+  const [errors, setErrors] = React.useState({});
+  React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
+
+  async function requestNotifications() {
+    if (!("Notification" in window)) { setNotifStatus("denied"); return; }
+    const p = await Notification.requestPermission();
+    setNotifStatus(p);
+  }
+
+  function formatMinutes(m) {
+    if (m < 60) return `${m} دقيقة`;
+    if (m % 60 === 0) return `${m / 60} ${m / 60 === 1 ? "ساعة" : "ساعات"}`;
+    return `${Math.floor(m / 60)}س ${m % 60}د`;
+  }
+
+  function submit() {
+    const e = {};
+    if (!form.title.trim()) e.title = "اكتب عنوان التنبيه";
+    const mins = safeNumber(form.everyMinutes);
+    if (!mins || mins < 1) e.everyMinutes = "الفاصل يجب أن يكون أكبر من صفر";
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setErrors({});
+    add({ ...form, id: uid(), everyMinutes: mins, enabled: !!form.enabled, createdAt: new Date().toISOString() });
+  }
+
+  const sortedReminders = [...(data.reminders || [])].sort((a, b) => a.everyMinutes - b.everyMinutes);
+
+  return (
+    <>
+      <Alert severity="info" icon={false} sx={{ mb: 2, borderRadius: 3, fontSize: 13, bgcolor: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e" }}>
+        ⚠️ إشعارات المتصفح تعمل فقط عند فتح التطبيق. التنبيهات الداخلية تعمل دائمًا.
+      </Alert>
+
+      <SectionCard title="إضافة تنبيه جديد">
+        <Stack spacing={2}>
+          {/* Title */}
+          <TextField fullWidth label="عنوان التنبيه" value={form.title}
+            onChange={e => setForm({ ...form, title: e.target.value })}
+            error={!!errors.title} helperText={errors.title}
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }} />
+
+          {/* Preset chips */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: "block", mb: 1 }}>الفاصل الزمني</Typography>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1.5 }}>
+              {PRESETS.map(p => (
+                <Chip key={p.minutes} label={p.label} clickable
+                  variant={form.everyMinutes === p.minutes ? "filled" : "outlined"}
+                  color={form.everyMinutes === p.minutes ? "primary" : "default"}
+                  onClick={() => setForm({ ...form, everyMinutes: p.minutes })}
+                  sx={{ fontWeight: 700, borderRadius: 2 }} />
+              ))}
+            </Stack>
+            <TextField size="small" type="number" label="أو أدخل دقائق مخصصة" value={form.everyMinutes}
+              onChange={e => setForm({ ...form, everyMinutes: Number(e.target.value) })}
+              error={!!errors.everyMinutes} helperText={errors.everyMinutes}
+              inputProps={{ min: 1 }} sx={{ width: 200, "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }} />
+          </Box>
+
+          {/* Time window */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: "block", mb: 1 }}>نافذة التنبيه</Typography>
+            <Stack direction="row" spacing={1.5}>
+              <TextField size="small" type="time" label="من" value={form.startTime}
+                onChange={e => setForm({ ...form, startTime: e.target.value })}
+                InputLabelProps={{ shrink: true }} sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }} />
+              <TextField size="small" type="time" label="إلى" value={form.endTime}
+                onChange={e => setForm({ ...form, endTime: e.target.value })}
+                InputLabelProps={{ shrink: true }} sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2.5 } }} />
+            </Stack>
+          </Box>
+
+          <FormControlLabel
+            control={<Switch checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} color="primary" />}
+            label={<Typography fontWeight={700} fontSize={14}>تفعيل التنبيه فورًا</Typography>} />
+
+          {/* Actions */}
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <Button fullWidth variant="contained" onClick={submit} sx={{ borderRadius: 2.5, fontWeight: 800 }}>
+              حفظ التنبيه
+            </Button>
+            <Button fullWidth variant="outlined"
+              color={notifStatus === "granted" ? "success" : notifStatus === "denied" ? "error" : "primary"}
+              onClick={requestNotifications} sx={{ borderRadius: 2.5 }}>
+              {notifStatus === "granted" ? "✅ الإشعارات مفعلة" : notifStatus === "denied" ? "❌ رُفض الإذن" : "تفعيل إشعارات المتصفح"}
+            </Button>
+          </Stack>
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title={`التنبيهات المسجلة (${sortedReminders.length})`}>
+        {sortedReminders.length === 0 ? (
+          <Box sx={{ py: 3, textAlign: "center" }}>
+            <Typography fontSize={32} sx={{ mb: 1 }}>⏰</Typography>
+            <Typography color="text.secondary" fontWeight={600}>لا توجد تنبيهات بعد</Typography>
+            <Typography variant="caption" color="text.secondary">أضف تنبيهًا من الأعلى لتذكيرك بالرضاعة والحفاضات</Typography>
+          </Box>
+        ) : (
+          <Stack spacing={1.25}>
+            {sortedReminders.map(r => (
+              <Box key={r.id} sx={{
+                p: 1.5, borderRadius: 2.5, border: `1.5px solid ${r.enabled ? "#bfdbfe" : "#e2e8f0"}`,
+                bgcolor: r.enabled ? "#eff6ff" : "#f8fafc",
+                display: "flex", alignItems: "center", gap: 1.5
+              }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: r.enabled ? "#2563eb" : "#94a3b8",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                  ⏰
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography fontWeight={800} fontSize={14} sx={{ color: r.enabled ? "#1e3a8a" : "#64748b", textAlign: "right" }}>
+                    {r.title}
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} sx={{ mt: 0.4, justifyContent: "flex-end" }} useFlexGap flexWrap="wrap">
+                    <Chip size="small" label={`كل ${formatMinutes(r.everyMinutes)}`}
+                      sx={{ bgcolor: r.enabled ? "#dbeafe" : "#e2e8f0", color: r.enabled ? "#1d4ed8" : "#64748b", fontWeight: 700, fontSize: 11, height: 20 }} />
+                    <Chip size="small" label={`${r.startTime} – ${r.endTime}`}
+                      sx={{ bgcolor: "#f1f5f9", color: "#475569", fontWeight: 600, fontSize: 11, height: 20 }} />
+                    <Chip size="small" label={r.enabled ? "مفعل" : "متوقف"}
+                      sx={{ bgcolor: r.enabled ? "#dcfce7" : "#fee2e2", color: r.enabled ? "#16a34a" : "#dc2626", fontWeight: 700, fontSize: 11, height: 20 }} />
+                  </Stack>
+                </Box>
+                <Button size="small" color="error" variant="outlined"
+                  onClick={() => remove(r.id)}
+                  sx={{ borderRadius: 2, minWidth: 40, px: 0.75, flexShrink: 0, fontSize: 16, border: "1px solid #fecaca" }}>
+                  🗑
+                </Button>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+function Settings({ data, saveSettings, apiUrl, setApiUrl, saveApiUrl, syncFromCloud, setSyncPaused }) {
+  const [settings, setSettings] = React.useState(data.settings);
+  const [saved, setSaved] = React.useState(false);
+  React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
+  React.useEffect(() => setSettings(data.settings), [data.settings]);
+
+  // Compute baby age and ml/kg target
+  const latestWeight = data.weights && data.weights.length > 0
+    ? [...data.weights].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0].weight
+    : null;
+  const targetMlDay = latestWeight && settings.targetMlPerKg
+    ? Math.round((latestWeight / 1000) * safeNumber(settings.targetMlPerKg))
+    : null;
+  const ageText = React.useMemo(() => {
+    if (!settings.birthDate) return null;
+    const birth = new Date(settings.birthDate);
+    const now = new Date();
+    const totalDays = Math.floor((now - birth) / 86400000);
+    if (totalDays < 0) return null;
+    const weeks = Math.floor(totalDays / 7);
+    const days = totalDays % 7;
+    if (weeks < 8) return `${weeks} أسبوع${days > 0 ? ` و ${days} أيام` : ""}`;
+    const months = Math.floor(totalDays / 30.44);
+    const remDays = Math.floor(totalDays - months * 30.44);
+    return `${months} شهر${remDays > 3 ? ` و ${remDays} يومًا` : ""}`;
+  }, [settings.birthDate]);
+
+  function handleSave() {
+    saveSettings(settings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  const inputSx = { "& .MuiOutlinedInput-root": { borderRadius: 2.5 } };
+
+  return (
+    <>
+      {/* Baby info summary strip */}
+      {(settings.babyName || ageText || latestWeight) && (
+        <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 3, border: "1px solid #bfdbfe", bgcolor: "#eff6ff",
+          display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ width: 44, height: 44, borderRadius: "50%", bgcolor: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>
+            👶
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {settings.babyName && <Typography fontWeight={900} fontSize={16} color="#1e3a8a">{settings.babyName}</Typography>}
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.25 }}>
+              {ageText && <Chip size="small" label={`العمر: ${ageText}`} sx={{ bgcolor: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: 11, height: 20 }} />}
+              {latestWeight && <Chip size="small" label={`آخر وزن: ${latestWeight} g`} sx={{ bgcolor: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: 11, height: 20 }} />}
+              {targetMlDay && <Chip size="small" label={`هدف الطبيب: ${targetMlDay} ml/يوم`} sx={{ bgcolor: "#dcfce7", color: "#16a34a", fontWeight: 700, fontSize: 11, height: 20 }} />}
+            </Stack>
+          </Box>
+        </Paper>
+      )}
+
+      <SectionCard title="معلومات الطفلة">
+        <Stack spacing={2}>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+            <TextField fullWidth label="اسم الطفلة" value={settings.babyName || ""}
+              onChange={e => setSettings({ ...settings, babyName: e.target.value })} sx={inputSx} />
+            <TextField fullWidth type="date" label="تاريخ الميلاد" value={settings.birthDate || ""}
+              onChange={e => setSettings({ ...settings, birthDate: e.target.value })}
+              InputLabelProps={{ shrink: true }} sx={inputSx} />
+          </Box>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "1fr 1fr 1fr" }, gap: 2 }}>
+            <TextField fullWidth type="number" label="وزن الولادة (g)" value={settings.birthWeight || ""}
+              onChange={e => setSettings({ ...settings, birthWeight: e.target.value })} sx={inputSx} />
+            <TextField fullWidth label="عمر الحمل (أسابيع)" value={settings.gestationalAgeWeeks || ""}
+              onChange={e => setSettings({ ...settings, gestationalAgeWeeks: e.target.value })} sx={inputSx} />
+            <TextField fullWidth type="number" label="هدف الطبيب (ml/kg/day)" value={settings.targetMlPerKg || ""}
+              onChange={e => setSettings({ ...settings, targetMlPerKg: e.target.value })}
+              helperText={targetMlDay ? `= ${targetMlDay} ml/يوم بناءً على آخر وزن` : "ادخل الوزن الحالي لحساب الهدف"}
+              sx={inputSx} />
+          </Box>
+          <Button variant={saved ? "contained" : "contained"} color={saved ? "success" : "primary"}
+            onClick={handleSave} sx={{ borderRadius: 2.5, fontWeight: 800, alignSelf: "flex-start", px: 4 }}>
+            {saved ? "✅ تم الحفظ" : "حفظ الإعدادات"}
+          </Button>
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title="ربط Google Sheets ☁️">
+        <Stack spacing={2}>
+          <Alert severity="info" icon={false} sx={{ borderRadius: 2.5, fontSize: 13, bgcolor: "#f0f9ff", border: "1px solid #bae6fd", color: "#0c4a6e" }}>
+            ضع رابط Google Apps Script هنا أو في Netlify كـ <strong>GOOGLE_SCRIPT_URL</strong>. المزامنة تلقائية كل 10 ثواني.
+          </Alert>
+          <TextField fullWidth label="Google Apps Script URL"
+            value={apiUrl} onChange={e => setApiUrl(e.target.value)}
+            placeholder="https://script.google.com/macros/s/…/exec"
+            sx={inputSx} />
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <Button variant="contained" onClick={saveApiUrl} sx={{ borderRadius: 2.5, fontWeight: 800 }}>حفظ الرابط</Button>
+            <Button variant="outlined" onClick={() => syncFromCloud({ silent: false, force: true })} sx={{ borderRadius: 2.5 }}>
+              اختبار المزامنة
+            </Button>
+          </Stack>
+        </Stack>
+      </SectionCard>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <MaterialUI.ThemeProvider theme={theme}>
+    <CssBaseline />
+    <App />
+  </MaterialUI.ThemeProvider>
+);
+</script>
+</body>
+</html>
