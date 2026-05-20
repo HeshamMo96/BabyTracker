@@ -147,11 +147,14 @@ const NAV_ITEMS = [
 ];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey(new Date());
 }
 function nowTime() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function toDateKey(value) {
   if (value === null || value === undefined || value === "") return "";
@@ -465,7 +468,7 @@ function buildDailySeries(data, days = 14) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const date = d.toISOString().slice(0,10);
+    const date = localDateKey(d);
     const s = calcSummary(data, date);
     const wForDate = data.weights
       .filter(x => toDateKey(x.date) <= date)
@@ -488,7 +491,7 @@ function dateRange(days) {
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - days + 1);
-  return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
+  return { start: localDateKey(start), end: localDateKey(end) };
 }
 function inLastDays(item, days) {
   const { start, end } = dateRange(days);
@@ -705,15 +708,17 @@ function getMinRecordDate(data) {
 }
 
 function addDaysKey(dateKey, days) {
-  const d = new Date(`${dateKey}T00:00:00`);
+  const parts = String(dateKey).split("-").map(Number);
+  if (parts.length !== 3 || parts.some(x => !Number.isFinite(x))) return dateKey;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localDateKey(d);
 }
 
 function yesterdayKey() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return localDateKey(d);
 }
 
 function buildSeriesBetween(data, startKey, endKey) {
@@ -722,7 +727,9 @@ function buildSeriesBetween(data, startKey, endKey) {
   const out = [];
   let cursor = startKey;
 
-  while (cursor <= endKey) {
+  let guard = 0;
+  while (cursor <= endKey && guard < 400) {
+    guard += 1;
     const s = calcSummary(data, cursor);
     const wForDate = data.weights
       .filter(x => toDateKey(x.date) <= cursor)
@@ -830,8 +837,11 @@ function getStoolAnalysis(diapers, days) {
 
 function daysBetweenKeys(startKey, endKey) {
   if (!startKey || !endKey) return 0;
-  const s = new Date(`${startKey}T00:00:00`).getTime();
-  const e = new Date(`${endKey}T00:00:00`).getTime();
+  const sp = String(startKey).split("-").map(Number);
+  const ep = String(endKey).split("-").map(Number);
+  if (sp.length !== 3 || ep.length !== 3) return 0;
+  const s = new Date(sp[0], sp[1] - 1, sp[2]).getTime();
+  const e = new Date(ep[0], ep[1] - 1, ep[2]).getTime();
   if (Number.isNaN(s) || Number.isNaN(e)) return 0;
   return Math.max(0, Math.round((e - s) / 86400000));
 }
