@@ -469,7 +469,7 @@ function buildDailySeries(data, days = 14) {
     const s = calcSummary(data, date);
     const wForDate = data.weights
       .filter(x => toDateKey(x.date) <= date)
-      .sort((a,b) => (`${toDateKey(b.date)} ${b.time}`).localeCompare(`${toDateKey(a.date)} ${a.time}`))[0];
+      .sort((a,b) => (`${toDateKey(b.date)} ${toTimeKey(b.time)}`).localeCompare(`${toDateKey(a.date)} ${toTimeKey(a.time)}`))[0];
     out.push({
       date: date.slice(5),
       fullDate: date,
@@ -516,7 +516,7 @@ function getReportStats(data, days) {
   const series = buildDailySeries(data, days);
   const feeds = data.feeds.filter(x => inLastDays(x, days));
   const diapers = data.diapers.filter(x => inLastDays(x, days));
-  const weights = data.weights.filter(x => inLastDays(x, days)).sort((a,b)=>(`${toDateKey(a.date)} ${a.time}`).localeCompare(`${toDateKey(b.date)} ${b.time}`));
+  const weights = data.weights.filter(x => inLastDays(x, days)).sort((a,b)=>(`${toDateKey(a.date)} ${toTimeKey(a.time)}`).localeCompare(`${toDateKey(b.date)} ${toTimeKey(b.time)}`));
 
   const direct = feeds.filter(x => x.type === "طبيعي مباشر");
   const bottle = feeds.filter(x => x.type !== "طبيعي مباشر");
@@ -945,6 +945,7 @@ function App() {
   const [syncPaused, setSyncPaused] = React.useState(false);
   const lastLocalEditRef = React.useRef(0);
   const syncingRef = React.useRef(false);
+  const pendingSaveRef = React.useRef({});
   const [apiUrl, setApiUrl] = React.useState(localStorage.getItem(API_STORAGE_KEY) || "");
   const [editing, setEditing] = React.useState(null);
   const isSmall = useMediaQuery("(max-width:700px)");
@@ -977,13 +978,23 @@ function App() {
   }
 
   async function addCloud(action, localKey, row) {
-    // حفظ فوري محليًا عشان المستخدم يشوف السجل فورًا
-    lastLocalEditRef.current = Date.now();
-    const next = { ...data, [localKey]: [...data[localKey], row] };
-    setData(next);
-    setLocalData(next);
+    // حماية من الدبل كليك / ضغطتين حفظ متتاليتين لنفس نوع السجل.
+    // السبب الأكثر شيوعًا لتكرار الصفوف في Google Sheets هو ضغط زر الحفظ مرتين بسرعة.
+    const lockKey = action;
+    if (pendingSaveRef.current[lockKey]) {
+      setToast("جاري حفظ السجل بالفعل، انتظر لحظة...");
+      return;
+    }
+
+    pendingSaveRef.current[lockKey] = true;
 
     try {
+      // حفظ فوري محليًا عشان المستخدم يشوف السجل فورًا
+      lastLocalEditRef.current = Date.now();
+      const next = { ...data, [localKey]: [...data[localKey], row] };
+      setData(next);
+      setLocalData(next);
+
       await apiRequest(action, row);
       setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setToast("تم الحفظ في Google Sheets");
@@ -991,6 +1002,10 @@ function App() {
       // المزامنة التلقائية هتشتغل بعد 15 ثانية لتجنب مسح أي كتابة جارية.
     } catch (e) {
       setToast("تم الحفظ محليًا فقط ولم يصل للشيت: " + e.message);
+    } finally {
+      setTimeout(() => {
+        pendingSaveRef.current[lockKey] = false;
+      }, 1200);
     }
   }
   async function deleteCloud(kind, id) {
@@ -1012,12 +1027,18 @@ function App() {
     }
   }
 
-  function removeReminder(id) {
+  async function removeReminder(id) {
+    if (!id) return;
     lastLocalEditRef.current = Date.now();
     const next = { ...data, reminders: data.reminders.filter(x => x.id !== id) };
     setData(next);
     setLocalData(next);
-    setToast("تم حذف التنبيه");
+    try {
+      await apiRequest("deleteReminder", { id });
+      setToast("تم حذف التنبيه");
+    } catch (e) {
+      setToast("تم حذف التنبيه محليًا فقط: " + e.message);
+    }
   }
 
   async function updateCloud(kind, row) {
@@ -1822,11 +1843,25 @@ function WeightForm({ add, setSyncPaused }) {
 }
 
 function FormCard({ title, children, submit }) {
+  const [busy, setBusy] = React.useState(false);
+
+  async function handleSubmit() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await Promise.resolve(submit());
+    } finally {
+      setTimeout(() => setBusy(false), 1200);
+    }
+  }
+
   return (
     <SectionCard title={title}>
       <Stack spacing={2}>
         {children}
-        <Button variant="contained" size="large" onClick={submit}>حفظ</Button>
+        <Button variant="contained" size="large" disabled={busy} onClick={handleSubmit}>
+          {busy ? "جاري الحفظ..." : "حفظ"}
+        </Button>
       </Stack>
     </SectionCard>
   );
@@ -2370,7 +2405,7 @@ function Settings({ data, saveSettings, apiUrl, setApiUrl, saveApiUrl, syncFromC
 
   // Compute baby age and ml/kg target
   const latestWeight = data.weights && data.weights.length > 0
-    ? [...data.weights].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0].weight
+    ? safeNumber([...data.weights].sort((a, b) => (`${toDateKey(b.date)} ${toTimeKey(b.time)}`).localeCompare(`${toDateKey(a.date)} ${toTimeKey(a.time)}`))[0].grams)
     : null;
   const targetMlDay = latestWeight && settings.targetMlPerKg
     ? Math.round((latestWeight / 1000) * safeNumber(settings.targetMlPerKg))
