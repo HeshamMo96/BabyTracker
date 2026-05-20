@@ -383,7 +383,7 @@ function apiRequest(action, payload = {}) {
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error("انتهت مهلة الاتصال بـ Google Apps Script. تأكد من رابط /exec والصلاحيات."));
-    }, 20000);
+    }, 45000);
 
     function cleanup() {
       clearTimeout(timeout);
@@ -998,10 +998,12 @@ function App() {
       await apiRequest(action, row);
       setLastSyncedAt(new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setToast("تم الحفظ في Google Sheets");
+      return true;
       // لا نعمل sync مباشر هنا؛ لأن السجل محفوظ محليًا بالفعل.
       // المزامنة التلقائية هتشتغل بعد 15 ثانية لتجنب مسح أي كتابة جارية.
     } catch (e) {
       setToast("تم الحفظ محليًا فقط ولم يصل للشيت: " + e.message);
+      return false;
     } finally {
       setTimeout(() => {
         pendingSaveRef.current[lockKey] = false;
@@ -1707,14 +1709,17 @@ function FeedForm({ add, setSyncPaused }) {
   const isBreast = form.type === "طبيعي مباشر";
   const isMixed  = form.type === "مختلط";
 
-  function submit() {
+  async function submit() {
     const e = {};
     if (!form.date) e.date = "مطلوب";
     if (!form.time) e.time = "مطلوب";
     if (!isBreast && !form.knownMl) e.knownMl = "أدخل الكمية";
     if (isBreast && !form.directMinutes) e.directMinutes = "أدخل المدة";
     if (Object.keys(e).length) { setErrors(e); return; }
-    add({ ...form, id: uid(), knownMl: safeNumber(form.knownMl), directMinutes: safeNumber(form.directMinutes), createdAt: new Date().toISOString() });
+
+    const ok = await add({ ...form, id: uid(), knownMl: safeNumber(form.knownMl), directMinutes: safeNumber(form.directMinutes), createdAt: new Date().toISOString() });
+    if (!ok) return;
+
     setForm({ ...form, time: nowTime(), knownMl: "", directMinutes: "", notes: "" });
     setErrors({});
   }
@@ -1774,8 +1779,9 @@ function DiaperForm({ add, setSyncPaused }) {
   const [form, setForm] = React.useState({ date: todayStr(), time: nowTime(), type: "بول", stoolColor: "", stoolTexture: "", notes: "" });
   React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
   function set(k, v) { setForm({ ...form, [k]: v }); }
-  function submit() {
-    add({ ...form, id: uid(), createdAt: new Date().toISOString() });
+  async function submit() {
+    const ok = await add({ ...form, id: uid(), createdAt: new Date().toISOString() });
+    if (!ok) return;
     setForm({ ...form, time: nowTime(), stoolColor: "", stoolTexture: "", notes: "" });
   }
   const hasStool = form.type === "براز" || form.type === "بول + براز";
@@ -1818,9 +1824,12 @@ function WeightForm({ add, setSyncPaused }) {
   const [errors, setErrors] = React.useState({});
   React.useEffect(() => { setSyncPaused(true); return () => setSyncPaused(false); }, []);
   function set(k, v) { setForm({ ...form, [k]: v }); setErrors(e => ({ ...e, [k]: "" })); }
-  function submit() {
+  async function submit() {
     if (!form.grams) { setErrors({ grams: "أدخل الوزن بالجرام" }); return; }
-    add({ ...form, id: uid(), grams: safeNumber(form.grams), createdAt: new Date().toISOString() });
+
+    const ok = await add({ ...form, id: uid(), grams: safeNumber(form.grams), createdAt: new Date().toISOString() });
+    if (!ok) return;
+
     setForm({ ...form, time: nowTime(), grams: "", notes: "" });
     setErrors({});
   }
@@ -2276,14 +2285,14 @@ function Reminders({ data, add, remove, setSyncPaused }) {
     return `${Math.floor(m / 60)}س ${m % 60}د`;
   }
 
-  function submit() {
+  async function submit() {
     const e = {};
     if (!form.title.trim()) e.title = "اكتب عنوان التنبيه";
     const mins = safeNumber(form.everyMinutes);
     if (!mins || mins < 1) e.everyMinutes = "الفاصل يجب أن يكون أكبر من صفر";
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
-    add({ ...form, id: uid(), everyMinutes: mins, enabled: !!form.enabled, createdAt: new Date().toISOString() });
+    await add({ ...form, id: uid(), everyMinutes: mins, enabled: !!form.enabled, createdAt: new Date().toISOString() });
   }
 
   const sortedReminders = [...(data.reminders || [])].sort((a, b) => a.everyMinutes - b.everyMinutes);
